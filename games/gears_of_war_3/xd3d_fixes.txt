@@ -1,0 +1,152 @@
+# What tools/find_d3d.py did not find or got wrong in Gears of War 3 (XDK 2.0.20500), checked by hand
+# against GTA IV's (2.0.6274) and Gears of War's (2.0.3529, games/gears_of_war, read only).
+# tools/slot.py passes it on every port; it wins over the search.
+#   <name> <address>          a D3D function
+#   <name> -                  none in this game (its hook is left out)
+#   DeviceOffset(<n>) <m>     a device field: GTA IV keeps it at n, this game at m
+#   DeviceOffset(<n>) -       none in this game: the code that uses it is left out
+#
+# XDK 2.0.20500 changed two signatures: SetStreamSource has no offset (device, stream, buffer,
+# stride, dirty mask) and DrawIndexedVertices no base vertex (device, primitive, start index,
+# index count; VGT_INDX_OFFSET is written 0). The hooks read them so (XD3D_XDK_20500).
+# D3D's GPU wait turn, its hang handler and the kickoff (they do not vote on device fields):
+GpuWaitCheck 82AF98D8  # one turn of D3D's GPU waits (state: device, reason, read pointer, progress tick, start tick, start timebase +20, as Gears' 8222F460); the ring-space wait 82AF59B8 in Swap spun the render thread at 94% of a core
+GpuHangHandler 82B08120  # called by GpuWaitCheck after 5000 ticks without progress
+KickOff 82AF5008  # the only writer of CP_RB_WPTR (0x7FC80000 + 1812)
+
+#!votes-by-hand  (the functions below also line up the device fields: tools/find_d3d.py)
+
+DrawVertices 82AEFF00  # DRAW_INDX auto-index (0xC0012201) after VGT_INDX_OFFSET = start vertex; UE3's RHIDrawPrimitive (8295EE10) calls it, as Gears' 827DBB10 calls 8222DA48
+DrawIndexedVertices 82AF0318  # DRAW_INDX (0xC0032201); UE3's RHIDrawIndexedPrimitive (8295EE78) calls SetIndices (82AECC08) then it, as Gears' 8254F0A0 calls 8222AFD8 then 8222DE50
+BeginVertices 82AEF500  # DrawPrimitiveUP: (device, primitive, vertices, stride) returns the vertex pointer; UE3 8287B3E8 copies count * stride there and ends it inline (13716 -> 48)
+BeginIndexedVertices 82AEF9C0  # DrawIndexedPrimitiveUP, as Gears' 8222D4F8: (device, primitive, base vertex, vertices, indices, index format, stride, &indices, &vertices on the stack +84); UE3 8287B270 / 8287B330
+SetTexture 82AEF370  # GTA 829D3728: texture slot addi 3198 (GTA 3134), fetch constant (sampler + 48) * 24
+SetRenderTarget 82AECC98  # GTA 829CAB00: addi r11,r4,3172 (GTA 3108), the 0x20107 mask, 2593 / 3070 (GTA 3005)
+Resolve 82AF34A8  # GTA 829CB818: (device, flags, rects, texture, point, level, slice, ..., f1 depth); render target 3172 / depth stencil 12704 for flags & 7
+ClearRectangle 82AF16D8  # GTA 829D4360: (device, flags, ..., rect or a zero vector, ..., f1 depth); 0xC01C2B00 / 0xC00A2B00 packets, depth stencil 12704
+Swap 82AF6B10  # GTA 829D5388: the only VdSwap caller; frame counter 16840 (GTA 16544), 24-byte copy from r4 + 28
+LockResource 82AE8E40  # GTA 829D8F78: same arguments, andi. 4112, +12 / +8 by the flags
+UnlockResource 82AE9140  # GTA 829D91B0: lwarx add -256, lock count 0x100
+ReleaseResource 82AE93D0  # GTA 829D9338: lwarx add -1 on +4, releases the parent (+24) recursively
+LockTextureRectArray 82AEE858  # GTA 829D2D18: (texture, array index, level, rect, box, flags) into the worker 82AEE798
+LockTextureRect 82AEE798  # inlined: the worker both locks call (texture, array index, level, flags, ...); UE3 (8287BAF0, 8287D410, 82966208, 82966CE8) calls it itself, LockTextureRectArray (82AEE858) too (the hooks read it so: XD3D_XDK_20500)
+BindVertexShader 82AF9688  # IDirect3DVertexShader9::Bind without the flags: (shader, declaration, strides, pixel shader): reads the declaration's +0x1C and the shader's +896 vfetch table (+872), as Gears' 82234D70; UE3 (829643E0) binds each shader ahead, then draws with the declaration at 12120 = 0
+ADDR_NullClearColor 0x8224A840  # ClearRectangle loads its zero vector from here (lvx128) when no color is given; GTA's 0x82000BFC
+
+# Device fields, by GTA IV's offset (tools/find_d3d.py guessed many: these are checked against the functions above).
+# Up to about 10900 both devices are the same (the register shadows: 1920 0x4000, 6016 0x4400, 10112 0x4900,
+# 10368 0x2000, 10444 0x2100, 10528 0x2180, 10548 0x2200, 10596 0x2280, 10680 0x2300, 10832 0x2380).
+DeviceOffset(48) 48
+DeviceOffset(1152) 1152
+DeviceOffset(1776) 1776
+DeviceOffset(1912) 1912
+DeviceOffset(1916) 1916
+DeviceOffset(1920) 1920
+DeviceOffset(10112) 10112
+DeviceOffset(10128) 10128
+DeviceOffset(10272) 10272
+DeviceOffset(10400) 10400
+DeviceOffset(10428) 10428
+DeviceOffset(10432) 10432
+DeviceOffset(10436) 10436
+DeviceOffset(10440) 10440
+DeviceOffset(10444) 10444
+DeviceOffset(10456) 10456
+DeviceOffset(10460) 10460
+DeviceOffset(10464) 10464
+DeviceOffset(10493) 10493
+DeviceOffset(10494) 10494
+DeviceOffset(10495) 10495
+DeviceOffset(10497) 10497
+DeviceOffset(10498) 10498
+DeviceOffset(10499) 10499
+DeviceOffset(10500) 10500
+DeviceOffset(10548) 10548
+DeviceOffset(10552) 10552
+DeviceOffset(10556) 10556
+DeviceOffset(10564) 10564
+DeviceOffset(10568) 10568
+DeviceOffset(10580) 10580
+DeviceOffset(10584) 10584
+DeviceOffset(10588) 10588
+DeviceOffset(10592) 10592
+DeviceOffset(10604) 10604
+DeviceOffset(10628) 10628
+DeviceOffset(10688) 10688
+DeviceOffset(10708) 10708
+DeviceOffset(10712) 10712
+DeviceOffset(10752) 10752
+DeviceOffset(10768) 10768
+DeviceOffset(10772) 10772
+DeviceOffset(10824) 10824
+DeviceOffset(10832) 10832
+DeviceOffset(10836) 10836
+DeviceOffset(10840) 10840
+DeviceOffset(10844) 10844
+DeviceOffset(10896) 11024  # LockResource
+DeviceOffset(10908) 11036  # SetStreamSource / SetPixelShader
+DeviceOffset(10912) 11040  # SetStreamSource
+DeviceOffset(10916) 11044  # GTA 829CDE18 = 82AFAA68
+DeviceOffset(10920) 11048  # GTA 829D1670 = 82AF2DB8
+DeviceOffset(10932) 11060  # predication: GTA 829CD350.. = 82AFC928..
+DeviceOffset(10936) 11064  # predication, as 10932
+DeviceOffset(10940) 11068  # Swap
+DeviceOffset(10941) 11069  # Swap
+DeviceOffset(10942) 11070  # Swap
+DeviceOffset(10943) 11071  # Swap
+DeviceOffset(11812) 12120  # vertex declaration: the flush GTA 829DAD70 = 82AF8CF8
+DeviceOffset(11816) 12128  # LockResource
+DeviceOffset(11824) 12136  # SetStreamSource: stride words
+DeviceOffset(11844) 12156  # blend control: the 20 render-state setters GTA 829C7E50.. = 82AEA700..
+DeviceOffset(11848) 12160  # ClearRectangle: scissor enable
+DeviceOffset(11868) 12180  # SetDepthStencilSurface
+DeviceOffset(11872) 12184  # SetDepthStencilSurface
+DeviceOffset(11942) 12228  # SetTexture
+DeviceOffset(11968) 12254  # SetTexture
+DeviceOffset(12179) 12435  # the draw functions
+DeviceOffset(12428) 12684  # SetIndices
+DeviceOffset(12432) 12688  # SetRenderTarget: render targets (3172 * 4)
+DeviceOffset(12448) 12704  # depth stencil: Resolve / ClearRectangle
+DeviceOffset(12452) 12708  # SetStreamSource: buffers ((stream + 3177) * 4)
+DeviceOffset(12520) 12776  # SetStreamSource: stride bytes
+DeviceOffset(12536) 12792  # SetTexture: textures (3198 * 4)
+DeviceOffset(12640) 12896
+DeviceOffset(12644) 12900
+DeviceOffset(12648) 12904
+DeviceOffset(12652) 12908
+DeviceOffset(12656) 12912  # GTA 829CA1F0 = 82AEA408
+DeviceOffset(12660) 12916  # GTA 829CA1F0 = 82AEA408
+DeviceOffset(12668) 12924
+DeviceOffset(12672) 12928
+DeviceOffset(12676) 12932
+DeviceOffset(12680) 12936
+DeviceOffset(12700) 12956
+DeviceOffset(12704) 12960  # between 12700 and 12708
+DeviceOffset(12708) 12964
+DeviceOffset(12716) 12972  # GTA 829CD4C0 = 82AFCA98
+DeviceOffset(12720) 12976
+DeviceOffset(12740) 12996  # resolve batch count: no instruction shows it (EndTiling, not hooked here), +256 as 12720 and 13164
+DeviceOffset(12744) 13000  # resolve batch records, as 12740
+DeviceOffset(13184) 13440  # GTA 829CD4C0 = 82AFCA98
+DeviceOffset(13200) 13456  # GTA 829CD4C0 = 82AFCA98
+DeviceOffset(13204) 13460  # GTA 829CD4C0 = 82AFCA98
+DeviceOffset(13428) 13716  # BeginVertices
+DeviceOffset(13432) 13720
+DeviceOffset(13440) 13728
+DeviceOffset(13508) 13800  # command scratch: SetStreamSource
+DeviceOffset(13512) 13804  # command scratch end: SetStreamSource
+DeviceOffset(14828) 15120
+DeviceOffset(14920) 15212  # GTA 829D7740.. = 82AF48B0..
+DeviceOffset(16544) 16840  # Swap: the frame counter
+DeviceOffset(16552) 16848  # the completed frame
+DeviceOffset(22280) 24264  # the last field
+# Only the stand-ins for CreateDevice use these (not hooked with another XDK).
+DeviceOffset(13504) -  # CreateDevice's stand-in only
+DeviceOffset(14928) -  # CreateDevice's stand-in only
+DeviceOffset(14956) -  # CreateDevice's stand-in only
+DeviceOffset(16700) -  # CreateDevice's stand-in only
+DeviceOffset(16712) -  # CreateDevice's stand-in only
+DeviceOffset(21540) -  # CreateDevice's stand-in only
+DeviceOffset(21544) -  # CreateDevice's stand-in only
+DeviceOffset(21568) -  # CreateDevice's stand-in only
+DeviceOffset(21572) -  # CreateDevice's stand-in only
