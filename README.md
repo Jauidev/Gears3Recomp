@@ -23,10 +23,9 @@ disco a un APK. Sigue a [GearsRecomp](https://github.com/Jauidev/GearsRecomp), e
 
 ## Instalar en Android
 
-La APK todavía no está publicada; estará en [Releases](../../releases) (arm64, Android 10 o superior, Vulkan).
-
-1. Instala la APK y ábrela.
-2. En el launcher elige la ISO del juego o la carpeta del disco extraído. También puedes copiar el disco
+1. Descarga la APK de [Releases](../../releases) (arm64, Android 10 o superior, Vulkan).
+2. Instálala y ábrela.
+3. En el launcher elige la ISO del juego o la carpeta del disco extraído. También puedes copiar el disco
    extraído a `/sdcard/Android/data/com.xport.gears_of_war_3/files/game`.
 
 En Adreno, el launcher puede usar Mesa Turnip si el driver del sistema no sirve.
