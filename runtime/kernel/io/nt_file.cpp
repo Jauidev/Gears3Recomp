@@ -11,6 +11,9 @@
 #include <kernel/xdm.h>
 #include <os/paths.h>
 #include <os/thread_dump.h>
+#include <cerrno>
+#include <cstring>
+#include <mutex>
 #include <xport_gpu.h>
 
 struct Event;
@@ -170,6 +173,10 @@ namespace
         std::fstream stream;
         bool isDirectory = false;
         uint64_t position = 0;
+        // One read or write at a time: each is a seek and then a transfer on the same stream, and
+        // on the console a read with its own offset is atomic. Two threads on one handle would
+        // otherwise read from each other's offset, or fail outright once one of them hit the end.
+        std::mutex ioMutex;
         // Directory enumeration state for NtQueryDirectoryFile.
         std::vector<std::filesystem::directory_entry> entries;
         size_t nextEntry = 0;
@@ -253,6 +260,31 @@ std::string GetLastOpenedFile()
 {
     std::lock_guard guard{ g_lastOpenedMutex };
     return g_lastOpened;
+}
+
+// The last read that returned nothing: what the game's "I/O failure" (dirty disc) handler is about
+// (XamShowDirtyDiscErrorUI). A read at the very end of a file is ordinary and also lands here.
+static std::mutex g_lastReadFailureMutex;
+static std::string g_lastReadFailure;
+
+std::string GetLastFileReadFailure()
+{
+    std::lock_guard guard{ g_lastReadFailureMutex };
+    return g_lastReadFailure;
+}
+
+static void NoteReadFailure(const std::filesystem::path& path, uint64_t offset, uint32_t length, bool streamBad, int error)
+{
+    std::error_code ec;
+    const uint64_t size = std::filesystem::file_size(path, ec);
+    std::string text = fmt::format("{}: {} bytes at offset {} of {}", path.string(), length, offset,
+        ec ? std::string("a file that is gone (") + ec.message() + ")" : fmt::format("{} bytes", size));
+    if (!ec && offset >= size)
+        text += " (past the end: the file is shorter than the game expects)";
+    else if (streamBad || error != 0)
+        text += fmt::format(" (read error{}{})", error != 0 ? ": " : "", error != 0 ? strerror(error) : "");
+    std::lock_guard guard{ g_lastReadFailureMutex };
+    g_lastReadFailure = std::move(text);
 }
 
 // XPORT_SCAN_FOR=<text>[;<text>...] with XPORT_BACKTRACE_OPEN (debugging, Windows only): on those
@@ -470,9 +502,11 @@ uint32_t NtReadFile(uint32_t fileHandle, uint32_t eventHandle, uint32_t apcRouti
         return X_STATUS_INVALID_HANDLE;
 
     // An offset of -2 (FILE_USE_FILE_POINTER_POSITION) means "current position".
+    std::lock_guard ioLock{ file->ioMutex };
     uint64_t offset = byteOffset && byteOffset->get() != 0xFFFFFFFFFFFFFFFEull ? byteOffset->get() : file->position;
     file->stream.clear();
     file->stream.seekg(offset);
+    errno = 0;
     // The read may go straight from the kernel into the buffer, and a syscall that meets a page
     // Xenia's GPU write-protects fails instead of faulting: fire those watches first.
     xportgpu::PrepareHostWrite(g_memory.MapVirtual(buffer), length);
@@ -482,6 +516,7 @@ uint32_t NtReadFile(uint32_t fileHandle, uint32_t eventHandle, uint32_t apcRouti
 
     if (read == 0 && length != 0)
     {
+        NoteReadFailure(file->path, offset, length, file->stream.bad(), errno);
         Complete(ioStatus, X_STATUS_END_OF_FILE, 0, eventHandle);
         return X_STATUS_END_OF_FILE;
     }
@@ -499,9 +534,11 @@ uint32_t NtReadFileScatter(uint32_t fileHandle, uint32_t eventHandle, uint32_t a
     if (!file || file->isDirectory)
         return X_STATUS_INVALID_HANDLE;
 
+    std::lock_guard ioLock{ file->ioMutex };
     uint64_t offset = byteOffset && byteOffset->get() != 0xFFFFFFFFFFFFFFFEull ? byteOffset->get() : file->position;
     file->stream.clear();
     file->stream.seekg(offset);
+    errno = 0;
 
     uint32_t total = 0;
     for (uint32_t i = 0; total < length; i++)
@@ -518,6 +555,7 @@ uint32_t NtReadFileScatter(uint32_t fileHandle, uint32_t eventHandle, uint32_t a
 
     if (total == 0 && length != 0)
     {
+        NoteReadFailure(file->path, offset, length, file->stream.bad(), errno);
         Complete(ioStatus, X_STATUS_END_OF_FILE, 0, eventHandle);
         return X_STATUS_END_OF_FILE;
     }
@@ -534,6 +572,7 @@ uint32_t NtWriteFile(uint32_t fileHandle, uint32_t eventHandle, uint32_t apcRout
     if (!file || file->isDirectory)
         return X_STATUS_INVALID_HANDLE;
 
+    std::lock_guard ioLock{ file->ioMutex };
     uint64_t offset = byteOffset && byteOffset->get() != 0xFFFFFFFFFFFFFFFEull ? byteOffset->get() : file->position;
     file->stream.clear();
     file->stream.seekp(offset);

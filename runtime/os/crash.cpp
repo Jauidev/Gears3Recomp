@@ -13,6 +13,10 @@
 #else
 #include <signal.h>
 #include <dlfcn.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <algorithm>
+#include <cstring>
 #include <sys/prctl.h>
 #include <unwind.h>
 #endif
@@ -110,6 +114,33 @@ static void DumpGuestState(uint64_t faultAddress)
                 word(at + 8), word(at + 12), word(at + 16), word(at + 20), word(at + 24), word(at + 28));
         }
     }
+
+#ifndef PPC_CONFIG_NON_VOLATILE_AS_LOCAL
+    // A read or write through a null guest pointer (fault in the first 64 KB of the guest space):
+    // the registers alone do not tell a null entry in a live array from an object that was freed
+    // and reused (Gears of War 3, sub_827DFA78: a light's primitive list with a null first entry).
+    // The objects the saved registers point at do.
+    if (g_memory.base && faultAddress >= uint64_t(g_memory.base) && faultAddress < uint64_t(g_memory.base) + 0x10000)
+    {
+        const auto word = [](uint32_t address) { return ByteSwap(*reinterpret_cast<uint32_t*>(g_memory.base + address)); };
+        const struct { const char* name; uint32_t address; uint32_t size; } objects[] = {
+            {"r11", r11, 0x20}, {"r27", ctx->r27.u32, 0x40}, {"r28", ctx->r28.u32, 0x40},
+            {"r29", ctx->r29.u32, 0x80}, {"r30", ctx->r30.u32, 0x40}, {"r31", ctx->r31.u32, 0x40},
+        };
+        for (const auto& object : objects)
+        {
+            // The game's heaps and its image only: all of it is mapped on the host.
+            if (object.address < 0x10000 || object.address >= 0xC0000000 || (object.address & 3) != 0)
+                continue;
+            for (uint32_t offset = 0; offset < object.size; offset += 0x20)
+            {
+                const uint32_t at = object.address + offset;
+                DiagPrint("  [%s+%02X] %08X %08X %08X %08X %08X %08X %08X %08X\n", object.name, offset, word(at), word(at + 4),
+                    word(at + 8), word(at + 12), word(at + 16), word(at + 20), word(at + 24), word(at + 28));
+            }
+        }
+    }
+#endif
 
     PrintGuestBacktrace(ctx);
 }
@@ -271,6 +302,65 @@ static void DumpHostStack(const ucontext_t* uc)
 #endif
 }
 
+// The process's memory when it died: an abort() inside malloc (signal 6 with libc frames under
+// operator new) is the allocator giving up, and these lines tell why. A huge VmRSS/VmSwap is a
+// leak or a backlog, mappings near vm.max_map_count (65530) is the address space cut into too
+// many pieces, and ordinary figures point at heap corruption instead. Only open/read/close: the
+// allocator's locks may be held by the thread that crashed.
+static void DumpMemoryState()
+{
+    static char buffer[4096];
+    const auto readFile = [](const char* path) -> ssize_t
+    {
+        const int fd = open(path, O_RDONLY | O_CLOEXEC);
+        if (fd < 0)
+            return -1;
+        const ssize_t size = read(fd, buffer, sizeof(buffer) - 1);
+        close(fd);
+        if (size >= 0)
+            buffer[size] = '\0';
+        return size;
+    };
+    const auto printFields = [](const char* const* names, size_t count)
+    {
+        for (size_t i = 0; i < count; i++)
+        {
+            const char* line = strstr(buffer, names[i]);
+            if (!line || (line != buffer && line[-1] != '\n'))
+                continue;
+            const char* end = strchr(line, '\n');
+            const char* value = line + strlen(names[i]);
+            while (*value == ' ' || *value == '\t')
+                value++;
+            DiagPrint(" %s %.*s", names[i], int((end ? end : value + strlen(value)) - value), value);
+        }
+    };
+
+    if (readFile("/proc/self/status") > 0)
+    {
+        static const char* const names[] = { "VmSize:", "VmRSS:", "RssAnon:", "VmSwap:", "Threads:" };
+        DiagPrint("  memory:");
+        printFields(names, std::size(names));
+        DiagPrint("\n");
+    }
+    if (readFile("/proc/meminfo") > 0)
+    {
+        static const char* const names[] = { "MemTotal:", "MemAvailable:", "SwapFree:" };
+        DiagPrint("  system:");
+        printFields(names, std::size(names));
+        DiagPrint("\n");
+    }
+    const int fd = open("/proc/self/maps", O_RDONLY | O_CLOEXEC);
+    if (fd >= 0)
+    {
+        uint32_t mappings = 0;
+        for (ssize_t size; (size = read(fd, buffer, sizeof(buffer))) > 0;)
+            mappings += uint32_t(std::count(buffer, buffer + size, '\n'));
+        close(fd);
+        DiagPrint("  mappings: %u\n", mappings);
+    }
+}
+
 static void CrashHandler(int sig, siginfo_t* info, void* ucontext)
 {
     // A write to a page Xenia's GPU watches (XPORT_GPU=xenia): it fires the watch, opens the page
@@ -292,6 +382,7 @@ static void CrashHandler(int sig, siginfo_t* info, void* ucontext)
     char threadName[16] = {};
     prctl(PR_GET_NAME, threadName);
     DiagPrint("  thread %d '%s'\n", int(gettid()), threadName);
+    DumpMemoryState();
     DumpHostStack(uc);
     DumpGuestState(uint64_t(info->si_addr));
     fflush(stderr);

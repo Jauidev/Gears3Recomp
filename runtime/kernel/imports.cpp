@@ -18,6 +18,9 @@
 #include <os/background.h>
 #include <os/logger.h>
 #include <os/thread_policy.h>
+#include <os/thread_dump.h>
+#include <cstdio>
+#include <cstdlib>
 
 #ifdef _WIN32
 #include <ntstatus.h>
@@ -437,9 +440,29 @@ uint32_t XamShowDeviceSelectorUI
     return 0;
 }
 
+std::string GetLastOpenedFile();      // kernel/io/nt_file.cpp
+std::string GetLastFileReadFailure(); // kernel/io/nt_file.cpp
+
+// "The disc is unreadable": the game calls it when a read of its files fails (Unreal's "I/O failure
+// operating on '%s'"), and on the console it never returns, the only way out is the dashboard. As a
+// stub that returned, the caller ran off the end of its function (Gears of War 3's render thread,
+// sub_823F4238, has no epilogue after the call) and the game died later with registers full of
+// garbage, a crash report that named nothing. The files on the
+// phone are incomplete or damaged, or the storage failed: say which read it was and end here.
 void XamShowDirtyDiscErrorUI()
 {
-    LOG_UTILITY("!!! STUB !!!");
+    const std::string failure = GetLastFileReadFailure();
+    const std::string opened = GetLastOpenedFile();
+    LOGF_ERROR("dirty disc error: the game could not read its files. Last failed read: {}. Last file opened: {}",
+        failure.empty() ? "none recorded" : failure, opened.empty() ? "-" : opened);
+    DiagOpenReportFile();
+    DiagPrint("\n*** the game could not read its files (the console's \"disc is unreadable\" error)\n");
+    DiagPrint("  The copy of the game on this device is incomplete or damaged, or the storage failed.\n");
+    DiagPrint("  Import the disc again (a complete ISO, with enough free space) and try once more.\n");
+    DiagPrint("  last failed read: %s\n", failure.empty() ? "none recorded" : failure.c_str());
+    DiagPrint("  last file opened: %s\n", opened.empty() ? "-" : opened.c_str());
+    fflush(stderr);
+    std::_Exit(1);
 }
 
 void XamEnableInactivityProcessing()

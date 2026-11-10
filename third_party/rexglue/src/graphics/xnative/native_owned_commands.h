@@ -3,6 +3,7 @@
 #include <cassert>
 #include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <iterator>
 #include <memory>
@@ -14,6 +15,7 @@
 #include <utility>
 #include <vector>
 #if defined(__ANDROID__)
+#include <android/log.h>
 #include <pthread.h>
 #endif
 
@@ -296,13 +298,46 @@ class NativeCommandRetirer {
   }
   NativeCommandRetirer(const NativeCommandRetirer&) = delete;
   NativeCommandRetirer& operator=(const NativeCommandRetirer&) = delete;
+  // The backlog is bounded: every unretired command keeps its ~3 KB slot and
+  // its constant snapshots (up to ~8 KB a draw) alive, and nothing returns to
+  // the pools meanwhile, so each new frame allocates all of it again. The
+  // retirer runs on the little cores at low priority (thread_policy.cpp); when
+  // it is starved there (shader translation, thermal limits, a phone with
+  // fewer or slower little cores) the backlog grew by tens of MB per frame
+  // until malloc aborted in the render worker (ConstantSnapshotPool::Copy).
+  // Past the bound the retiring thread frees the oldest batches itself:
+  // backpressure, and the order of the batches is kept.
+  static constexpr size_t kMaximumPendingCommands = 16384;
   void Retire(Batch&& batch) {
     if (batch.empty()) return;
-    {
-      std::lock_guard lock(mutex_);
-      pending_.push_back(std::move(batch));
+    std::unique_lock lock(mutex_);
+    pending_commands_ += batch.size();
+    pending_.push_back(std::move(batch));
+    bool helped = false;
+    while (pending_commands_ > kMaximumPendingCommands && !pending_.empty()) {
+      Batch oldest = std::move(pending_.front());
+      pending_.pop_front();
+      pending_commands_ -= oldest.size();
+      lock.unlock();
+      pool_.RetireBatch(oldest);
+      helped = true;
+      lock.lock();
     }
-    condition_.notify_one();
+    const bool wake = !pending_.empty();
+    lock.unlock();
+    if (wake) condition_.notify_one();
+    if (helped) {
+      const uint64_t count = backpressure_events_.fetch_add(1, std::memory_order_relaxed) + 1;
+#if defined(__ANDROID__)
+      // 1, 2, 4, 8... so a starved retirer shows in the log without flooding it.
+      if ((count & (count - 1)) == 0)
+        __android_log_print(ANDROID_LOG_WARN, "xnative",
+                            "retirer: backlog over %zu commands, retired inline (%llu times)",
+                            kMaximumPendingCommands, (unsigned long long)count);
+#else
+      (void)count;
+#endif
+    }
   }
 
  private:
@@ -316,6 +351,7 @@ class NativeCommandRetirer {
       if (pending_.empty()) return;  // stopping and drained
       Batch batch = std::move(pending_.front());
       pending_.pop_front();
+      pending_commands_ -= batch.size();
       lock.unlock();
       pool_.RetireBatch(batch);
       lock.lock();
@@ -325,6 +361,8 @@ class NativeCommandRetirer {
   std::mutex mutex_;
   std::condition_variable condition_;
   std::deque<Batch> pending_;
+  size_t pending_commands_ = 0;  // In pending_, under mutex_.
+  std::atomic<uint64_t> backpressure_events_{0};
   bool stopping_ = false;
   std::thread thread_;
 };
