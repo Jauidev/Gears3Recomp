@@ -3,12 +3,13 @@
 // per requested id, then the binary/string payloads. The title reads seven integer options plus its
 // 1000-byte title-specific block; it first calls with no buffer and needs ERROR_INSUFFICIENT_BUFFER
 // with the size, then allocates and reads asynchronously.
-//
-// Values written by the game are kept in memory for the session (not saved to disk yet).
 #include <stdafx.h>
 #include <kernel/function.h>
 #include <kernel/xdm.h>
 #include <os/logger.h>
+#include <os/paths.h>
+#include <fstream>
+#include <filesystem>
 
 uint32_t CompleteOverlapped(XXOVERLAPPED* overlapped, uint32_t result, uint32_t length);
 
@@ -92,11 +93,85 @@ namespace
     };
 
     std::mutex g_settingsMutex;
+    bool g_settingsLoaded = false;
     std::unordered_map<uint32_t, StoredSetting> g_settings = {
         // Dashboard defaults Xenia uses for a new profile.
         { 0x10040003, { 1, 3 } }, // XPROFILE_OPTION_CONTROLLER_VIBRATION: on
         { 0x10040022, { 1, 1 } }, // XPROFILE_GAMER_ACTION_AUTO_AIM: on
     };
+
+    std::filesystem::path ProfileSettingsFilePath()
+    {
+        return os::paths::GetSavePath() / "profile_settings.bin";
+    }
+
+    void SaveProfileSettingsLocked()
+    {
+        std::error_code ec;
+        const auto path = ProfileSettingsFilePath();
+        std::filesystem::create_directories(path.parent_path(), ec);
+
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        if (!out)
+            return;
+
+        const uint32_t magic = 0x58505246; // 'XPRF'
+        const uint32_t count = static_cast<uint32_t>(g_settings.size());
+        out.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+        out.write(reinterpret_cast<const char*>(&count), sizeof(count));
+
+        for (const auto& [id, st] : g_settings)
+        {
+            const uint32_t payloadSize = static_cast<uint32_t>(st.payload.size());
+            out.write(reinterpret_cast<const char*>(&id), sizeof(id));
+            out.write(reinterpret_cast<const char*>(&st.source), sizeof(st.source));
+            out.write(reinterpret_cast<const char*>(&st.value), sizeof(st.value));
+            out.write(reinterpret_cast<const char*>(&payloadSize), sizeof(payloadSize));
+            if (payloadSize > 0)
+                out.write(reinterpret_cast<const char*>(st.payload.data()), payloadSize);
+        }
+    }
+
+    void LoadProfileSettingsLocked()
+    {
+        if (g_settingsLoaded)
+            return;
+        g_settingsLoaded = true;
+
+        std::ifstream in(ProfileSettingsFilePath(), std::ios::binary);
+        if (!in)
+            return;
+
+        uint32_t magic = 0;
+        uint32_t count = 0;
+        if (!in.read(reinterpret_cast<char*>(&magic), sizeof(magic)) || magic != 0x58505246)
+            return;
+        if (!in.read(reinterpret_cast<char*>(&count), sizeof(count)) || count > 4096)
+            return;
+
+        for (uint32_t i = 0; i < count; i++)
+        {
+            uint32_t id = 0;
+            StoredSetting st;
+            uint32_t payloadSize = 0;
+            if (!in.read(reinterpret_cast<char*>(&id), sizeof(id)) ||
+                !in.read(reinterpret_cast<char*>(&st.source), sizeof(st.source)) ||
+                !in.read(reinterpret_cast<char*>(&st.value), sizeof(st.value)) ||
+                !in.read(reinterpret_cast<char*>(&payloadSize), sizeof(payloadSize)))
+            {
+                break;
+            }
+            if (payloadSize > 0x10000)
+                break;
+            if (payloadSize > 0)
+            {
+                st.payload.resize(payloadSize);
+                if (!in.read(reinterpret_cast<char*>(st.payload.data()), payloadSize))
+                    break;
+            }
+            g_settings[id] = std::move(st);
+        }
+    }
 
     // A title-specific block that was never written has no value, like on a fresh console profile.
     StoredSetting Lookup(uint32_t id)
@@ -111,6 +186,18 @@ namespace
     }
 }
 
+uint32_t XeKeysConsoleSignatureVerification()
+{
+    return 1;
+}
+GUEST_FUNCTION_HOOK(__imp__XeKeysConsoleSignatureVerification, XeKeysConsoleSignatureVerification);
+
+uint32_t XeKeysConsolePrivateKeySign()
+{
+    return 1;
+}
+GUEST_FUNCTION_HOOK(__imp__XeKeysConsolePrivateKeySign, XeKeysConsolePrivateKeySign);
+
 uint32_t XamUserReadProfileSettings(uint32_t titleId, uint32_t userIndex, uint32_t xuidCount, be<uint64_t>* xuids,
     uint32_t settingCount, be<uint32_t>* settingIds, be<uint32_t>* bufferSize, uint8_t* buffer, XXOVERLAPPED* overlapped)
 {
@@ -118,6 +205,7 @@ uint32_t XamUserReadProfileSettings(uint32_t titleId, uint32_t userIndex, uint32
         return ERROR_NO_SUCH_USER_X;
 
     std::lock_guard guard{ g_settingsMutex };
+    LoadProfileSettingsLocked();
 
     uint32_t needed = sizeof(ReadResults) + settingCount * sizeof(ProfileSetting);
     for (uint32_t i = 0; i < settingCount; i++)
@@ -183,6 +271,7 @@ uint32_t XamUserWriteProfileSettings(uint32_t titleId, uint32_t userIndex, uint3
 {
     {
         std::lock_guard guard{ g_settingsMutex };
+        LoadProfileSettingsLocked();
         for (uint32_t i = 0; i < settingCount; i++)
         {
             const ProfileSetting& in = settings[i];
@@ -208,6 +297,7 @@ uint32_t XamUserWriteProfileSettings(uint32_t titleId, uint32_t userIndex, uint3
 
             g_settings[id] = std::move(stored);
         }
+        SaveProfileSettingsLocked();
     }
 
     LOGF("{} settings written", settingCount);
@@ -216,6 +306,3 @@ uint32_t XamUserWriteProfileSettings(uint32_t titleId, uint32_t userIndex, uint3
         return CompleteOverlapped(overlapped, ERROR_SUCCESS, 0);
     return ERROR_SUCCESS;
 }
-
-GUEST_FUNCTION_HOOK(__imp__XamUserReadProfileSettings, XamUserReadProfileSettings);
-GUEST_FUNCTION_HOOK(__imp__XamUserWriteProfileSettings, XamUserWriteProfileSettings);
