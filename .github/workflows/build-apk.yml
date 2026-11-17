@@ -50,16 +50,18 @@ jobs:
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> $GITHUB_ENV
           echo "PATH=$ANDROID_HOME/cmake/3.31.6/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Download and extract default.xex
+            - name: Download and extract default.xex
         env:
           XEX_URL: ${{ secrets.XEX_DOWNLOAD_URL }}
         run: |
+          pip install gdown
           mkdir -p work_xex
-          curl -L "$XEX_URL" -o work_xex/xex.zip
+          gdown --fuzzy "$XEX_URL" -O work_xex/xex.zip
           unzip -o work_xex/xex.zip -d work_xex/
           XEX_FILE=$(find work_xex -iname "default.xex" | head -n 1)
           echo "Found XEX at: $XEX_FILE"
           cp "$XEX_FILE" work_xex/default.xex
+
 
       - name: Build XenonRecomp host tool (if needed)
         run: |
