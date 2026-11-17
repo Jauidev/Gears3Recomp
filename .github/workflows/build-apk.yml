@@ -60,7 +60,8 @@ jobs:
           unzip -o work_xex/xex.zip -d work_xex/
           XEX_FILE=$(find work_xex -iname "default.xex" | head -n 1)
           echo "Found XEX at: $XEX_FILE"
-          cp "$XEX_FILE" work_xex/default.xex
+          [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex || true
+
 
       - name: Build XenonRecomp host tool (if needed)
         run: |
