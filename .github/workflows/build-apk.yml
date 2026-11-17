@@ -67,14 +67,22 @@ jobs:
           if [ -d "third_party/XenonRecomp" ]; then
             cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
             cmake --build build-xenonrecomp -j $(nproc)
+            mkdir -p bin tools/bin
+            find build-xenonrecomp -type f -executable -exec cp {} bin/ \;
+            find build-xenonrecomp -type f -executable -exec cp {} tools/bin/ \;
           fi
 
-      - name: Run port.py (--no-build) to generate PPC code & slot
+      - name: Run port.py (--no-build) & place generated sources
         run: |
+          export PATH="$PWD/bin:$PWD/tools/bin:$PATH"
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
-          cp -rn work_port/ppc games/gears_of_war_3/ || true
-          cp -rn work_port/data games/gears_of_war_3/ || true
-          cp -rn work_port/gears_of_war_3/* games/gears_of_war_3/ 2>/dev/null || true
+          echo "=== Archivos generados en work_port ==="
+          find work_port -maxdepth 4
+          mkdir -p games/gears_of_war_3/ppc games/gears_of_war_3/data/shader
+          find work_port -path "*/ppc/*" -type f -exec cp {} games/gears_of_war_3/ppc/ \;
+          find work_port -path "*/shader/*" -type f -exec cp {} games/gears_of_war_3/data/shader/ \;
+          find work_port -maxdepth 2 -name "ppc_*.cpp" -o -name "ppc_*.h" | xargs -r -I{} cp {} games/gears_of_war_3/ppc/
+          find work_port -maxdepth 3 -name "shader_cache.*" | xargs -r -I{} cp {} games/gears_of_war_3/data/shader/
 
       - name: Build native Android libs & package APK
         run: |
