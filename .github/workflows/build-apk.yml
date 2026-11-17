@@ -62,7 +62,7 @@ jobs:
           echo "Found XEX at: $XEX_FILE"
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex || true
 
-      - name: Build XenonRecomp host tool (if needed)
+      - name: Build XenonRecomp host tool
         run: |
           if [ -d "third_party/XenonRecomp" ]; then
             cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
@@ -72,17 +72,22 @@ jobs:
             find build-xenonrecomp -type f -executable -exec cp {} tools/bin/ \;
           fi
 
-      - name: Run port.py (--no-build) & place generated sources
+      - name: Run port.py & auto-locate generated files
         run: |
           export PATH="$PWD/bin:$PWD/tools/bin:$PATH"
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
-          echo "=== Archivos generados en work_port ==="
-          find work_port -maxdepth 4
           mkdir -p games/gears_of_war_3/ppc games/gears_of_war_3/data/shader
-          find work_port -path "*/ppc/*" -type f -exec cp {} games/gears_of_war_3/ppc/ \;
-          find work_port -path "*/shader/*" -type f -exec cp {} games/gears_of_war_3/data/shader/ \;
-          find work_port -maxdepth 2 -name "ppc_*.cpp" -o -name "ppc_*.h" | xargs -r -I{} cp {} games/gears_of_war_3/ppc/
-          find work_port -maxdepth 3 -name "shader_cache.*" | xargs -r -I{} cp {} games/gears_of_war_3/data/shader/
+          PPC_MAP=$(find . -name "ppc_func_mapping.cpp" | head -n 1)
+          SHADER_CPP=$(find . -name "shader_cache.cpp" | head -n 1)
+          echo "PPC_MAP=$PPC_MAP"
+          echo "SHADER_CPP=$SHADER_CPP"
+          if [ -n "$PPC_MAP" ]; then
+            cp -rn "$(dirname "$PPC_MAP")"/* games/gears_of_war_3/ppc/ || true
+          fi
+          if [ -n "$SHADER_CPP" ]; then
+            cp -rn "$(dirname "$SHADER_CPP")"/* games/gears_of_war_3/data/shader/ || true
+          fi
+          ls -la games/gears_of_war_3/ppc/ games/gears_of_war_3/data/shader/
 
       - name: Build native Android libs & package APK
         run: |
