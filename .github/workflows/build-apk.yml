@@ -63,12 +63,14 @@ jobs:
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex || true
 
 
-      - name: Build XenonRecomp host tool (if needed)
+       - name: Build XenonRecomp host tool (if needed)
         run: |
           if [ -d "third_party/XenonRecomp" ]; then
-            cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja -DCMAKE_BUILD_TYPE=Release
+            cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
             cmake --build build-xenonrecomp -j $(nproc)
           fi
+
+
 
       - name: Run port.py (--no-build) to generate PPC code & slot
         run: |
