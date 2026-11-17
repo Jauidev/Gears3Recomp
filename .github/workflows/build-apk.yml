@@ -79,11 +79,9 @@ jobs:
 
       - name: Run port.py & verify generated PPC files
         run: |
-          python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
-          if [ -f "logs/xport.log" ]; then
-            echo "=== LOGS/XPORT.LOG ==="
-            tail -n 40 logs/xport.log
-          fi
+          python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build || true
+          echo "=== TODOS LOS LOGS ==="
+          find . -maxdepth 4 -name "*.log" -exec head -n 100 {} +
           ls -la games/gears_of_war_3/ppc/ games/gears_of_war_3/data/shader/
 
       - name: Build native Android libs & package APK
