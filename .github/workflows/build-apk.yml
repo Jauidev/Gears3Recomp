@@ -56,7 +56,7 @@ jobs:
         run: |
           pip install gdown
           mkdir -p work_xex
-          gdown --fuzzy "$XEX_URL" -O work_xex/xex.zip
+          gdown "$XEX_URL" -O work_xex/xex.zip
           unzip -o work_xex/xex.zip -d work_xex/
           XEX_FILE=$(find work_xex -iname "default.xex" | head -n 1)
           echo "Found XEX at: $XEX_FILE"
