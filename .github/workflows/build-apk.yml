@@ -62,31 +62,25 @@ jobs:
           echo "Found XEX at: $XEX_FILE"
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex || true
 
-      - name: Build XenonRecomp host tool
+      - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
         run: |
-          if [ -d "third_party/XenonRecomp" ]; then
-            cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-            cmake --build build-xenonrecomp -j $(nproc)
-            mkdir -p bin tools/bin
-            find build-xenonrecomp -type f -executable -exec cp {} bin/ \;
-            find build-xenonrecomp -type f -executable -exec cp {} tools/bin/ \;
+          mkdir -p bin
+          cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          cmake --build build-xenonrecomp -j $(nproc)
+          find build-xenonrecomp -type f -name "XenonRecomp*" -executable -exec cp {} bin/XenonRecomp.exe \;
+          find build-xenonrecomp -type f -name "XenonAnalyse*" -executable -exec cp {} bin/XenonAnalyse.exe \;
+          if [ -f "tools/xexinfo/CMakeLists.txt" ]; then
+            cmake -S tools/xexinfo -B build-xexinfo -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+            cmake --build build-xexinfo -j $(nproc)
+            find build-xexinfo -type f -name "xexinfo*" -executable -exec cp {} bin/xexinfo.exe \;
+          else
+            clang++ -O2 -std=c++20 tools/xexinfo/*.cpp -o bin/xexinfo.exe
           fi
+          ls -la bin/
 
-      - name: Run port.py & auto-locate generated files
+      - name: Run port.py & verify generated PPC files
         run: |
-          export PATH="$PWD/bin:$PWD/tools/bin:$PATH"
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
-          mkdir -p games/gears_of_war_3/ppc games/gears_of_war_3/data/shader
-          PPC_MAP=$(find . -name "ppc_func_mapping.cpp" | head -n 1)
-          SHADER_CPP=$(find . -name "shader_cache.cpp" | head -n 1)
-          echo "PPC_MAP=$PPC_MAP"
-          echo "SHADER_CPP=$SHADER_CPP"
-          if [ -n "$PPC_MAP" ]; then
-            cp -rn "$(dirname "$PPC_MAP")"/* games/gears_of_war_3/ppc/ || true
-          fi
-          if [ -n "$SHADER_CPP" ]; then
-            cp -rn "$(dirname "$SHADER_CPP")"/* games/gears_of_war_3/data/shader/ || true
-          fi
           ls -la games/gears_of_war_3/ppc/ games/gears_of_war_3/data/shader/
 
       - name: Build native Android libs & package APK
@@ -101,3 +95,4 @@ jobs:
           name: GearsOfWar3-Android-APK
           path: '**/*.apk'
           if-no-files-found: error
+          
