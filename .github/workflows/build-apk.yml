@@ -69,12 +69,13 @@ jobs:
           cmake --build build-xenonrecomp -j $(nproc)
           find build-xenonrecomp -type f -name "XenonRecomp*" -executable -exec cp {} bin/XenonRecomp.exe \;
           find build-xenonrecomp -type f -name "XenonAnalyse*" -executable -exec cp {} bin/XenonAnalyse.exe \;
-          XUTILS_LIB=$(find build-xenonrecomp -name "libXenonUtils.a" | head -n 1)
+          STATIC_LIBS=$(find build-xenonrecomp -name "*.a")
           clang++ -O2 -std=c++20 \
             -Ithird_party/XenonRecomp/XenonUtils \
             -Ithird_party/XenonRecomp/third_party/disasm \
+            -Ithird_party/XenonRecomp/third_party/disasm/include \
             -Ithird_party/XenonRecomp/third_party/fmt/include \
-            tools/xexinfo/*.cpp $XUTILS_LIB -o bin/xexinfo.exe
+            tools/xexinfo/*.cpp -Wl,--start-group $STATIC_LIBS -Wl,--end-group -o bin/xexinfo.exe
           ls -la bin/
 
       - name: Run port.py & verify generated PPC files
