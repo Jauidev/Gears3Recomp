@@ -72,6 +72,9 @@ jobs:
       - name: Run port.py (--no-build) to generate PPC code & slot
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
+          cp -rn work_port/ppc games/gears_of_war_3/ || true
+          cp -rn work_port/data games/gears_of_war_3/ || true
+          cp -rn work_port/gears_of_war_3/* games/gears_of_war_3/ 2>/dev/null || true
 
       - name: Build native Android libs & package APK
         run: |
