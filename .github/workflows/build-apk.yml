@@ -28,7 +28,7 @@ jobs:
       - name: Create 'py' command wrapper & install build tools + Wine
         run: |
           sudo dpkg --add-architecture i386
-          sudo apt-get update && sudo apt-get install -y ninja-build clang lld unzip curl wine wine32:i386
+          sudo apt-get update && sudo apt-get install -y ninja-build clang lld unzip curl p7zip-full wine wine32:i386
           pip install gdown capstone pefile
           echo '#!/usr/bin/env bash' | sudo tee /usr/local/bin/py
           echo 'if [ "$1" = "-3" ]; then shift; fi' | sudo tee -a /usr/local/bin/py
@@ -63,9 +63,12 @@ jobs:
           XEXP_FILE=$(find work_xex -iname "default.xexp" | head -n 1)
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex || true
           if [ -n "$XEXP_FILE" ]; then
-            echo "Applying TU6 patch: $XEXP_FILE"
-            curl -L "https://github.com" -o work_tools/xextool.zip || curl -L "https://archive.org" -o work_tools/xextool.zip
-            unzip -o work_tools/xextool.zip -d work_tools/
+            echo "Downloading XexTool from working mirror..."
+            curl -fL "https://githubusercontent.com" -o work_tools/xextool.exe || \
+            curl -fL "https://github.com" -o work_tools/xextool.zip
+            if [ -f work_tools/xextool.zip ]; then
+              7z x work_tools/xextool.zip -owork_tools/ -y
+            fi
             XEXTOOL_EXE=$(find work_tools -iname "xextool.exe" | head -n 1)
             WINEDEBUG=-all wine "$XEXTOOL_EXE" -p "$XEXP_FILE" work_xex/default.xex
           fi
