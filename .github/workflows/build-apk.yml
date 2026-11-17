@@ -86,6 +86,8 @@ jobs:
       - name: Build native Android libs & package APK
         run: |
           export USERPROFILE="$HOME"
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           chmod +x tools/*.sh
           sed -i 's/pwd -W/pwd/g' tools/build-apk.sh
           sed -i 's/\.bat//g' tools/build-apk.sh
