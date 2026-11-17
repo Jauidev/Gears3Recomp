@@ -88,6 +88,7 @@ jobs:
           chmod +x tools/*.sh
           sed -i 's/pwd -W/pwd/g' tools/build-apk.sh
           sed -i 's/\.bat//g' tools/build-apk.sh
+          sed -i 's/\.exe//g' tools/build-apk.sh
           XPORT_GAME=gears_of_war_3 bash tools/build-android.sh xportapp
           XPORT_GAME=gears_of_war_3 bash tools/build-apk.sh
 
