@@ -99,14 +99,13 @@ jobs:
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
           import os, re, subprocess
-          shared = ""
-          for root, _, files in os.walk("games/gears_of_war_3/ppc"):
-              for fn in files:
-                  if fn.endswith(".h") or fn.endswith(".cpp"):
-                      shared += open(os.path.join(root, fn), "r", encoding="utf-8", errors="ignore").read()
+          shared_path = "games/gears_of_war_3/ppc/ppc_recomp_shared.h"
+          shared = open(shared_path, "r", encoding="utf-8", errors="ignore").read() if os.path.exists(shared_path) else ""
 
           imp_syms = set()
           for root, _, files in os.walk("games/gears_of_war_3"):
+              if "ppc" in root.split(os.sep):
+                  continue
               for fn in files:
                   if fn.endswith(".h") or fn.endswith(".cpp"):
                       txt = open(os.path.join(root, fn), "r", encoding="utf-8", errors="ignore").read()
