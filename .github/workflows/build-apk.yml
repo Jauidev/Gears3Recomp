@@ -28,7 +28,7 @@ jobs:
       - name: Create 'py' command wrapper & install build tools + Wine
         run: |
           sudo dpkg --add-architecture i386
-          sudo apt-get update && sudo apt-get install -y ninja-build clang lld unzip curl wine wine32:i386
+          sudo apt-get update && sudo apt-get install -y ninja-build clang lld unzip curl zstd wine wine32:i386
           pip install gdown capstone pefile
           echo '#!/usr/bin/env bash' | sudo tee /usr/local/bin/py
           echo 'if [ "$1" = "-3" ]; then shift; fi' | sudo tee -a /usr/local/bin/py
@@ -85,27 +85,42 @@ jobs:
           chmod +x bin/*.exe
           ./bin/xexinfo.exe work_xex/default.xex || true
 
-      - name: Run port.py & generate shader cache headers
+      - name: Run port.py & generate valid shader cache headers
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
           mkdir -p games/gears_of_war_3/data/shader
           find work_port -iname "shader_cache.*" -exec cp {} games/gears_of_war_3/data/shader/ \; || true
           if [ ! -f games/gears_of_war_3/data/shader/shader_cache.h ]; then
-            cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.h
-          #pragma once
+            python3 - << 'PYEOF'
+          import subprocess
+          subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
+          zst = open("empty.zst", "rb").read()
+          arr = ", ".join(f"0x{b:02x}" for b in zst)
+          with open("games/gears_of_war_3/data/shader/shader_cache.h", "w") as f:
+              f.write(f"""#pragma once
           #include <cstdint>
           #include <cstddef>
-          struct ShaderCacheEntry { uint64_t hash; const void* spirv; size_t spirv_size; const void* dxil; size_t dxil_size; };
-          inline constexpr ShaderCacheEntry g_shader_cache_entries[] = {};
-          inline constexpr size_t g_shader_cache_entry_count = 0;
-          EOF
-          fi
-          if [ ! -f games/gears_of_war_3/data/shader/shader_cache.cpp ]; then
+
+          struct ShaderCacheEntry {{
+              const char* filename;
+              uint32_t stage;
+              size_t offset;
+              size_t size;
+              uint32_t usedTextureMask;
+          }};
+
+          inline constexpr uint8_t g_spirvCacheCompressedData[] = {{ {arr} }};
+          inline constexpr size_t g_spirvCacheCompressedSize = {len(zst)};
+          inline constexpr size_t g_spirvCacheDecompressedSize = 0;
+          inline constexpr ShaderCacheEntry g_shaderCacheEntries[] = {{}};
+          inline constexpr size_t g_shaderCacheEntryCount = 0;
+          """)
+          PYEOF
             cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.cpp
           #include "shader_cache.h"
           EOF
           fi
-          ls -la games/gears_of_war_3/data/shader/
+          cat games/gears_of_war_3/data/shader/shader_cache.h
 
       - name: Build native Android libs & package APK
         run: |
