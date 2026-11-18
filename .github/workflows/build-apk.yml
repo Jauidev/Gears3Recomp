@@ -102,7 +102,7 @@ jobs:
                           missing = [f for f in set(re.findall(r'sub_82[0-9A-Fa-f]{6}', txt)) if f"({f})" not in shared and f" {f}(" not in shared]
                           if missing:
                               print("Adding fallback declarations in", p, ":", missing)
-                              extra = "\n".join(f'extern "C" inline void {f}(PPCRegister&, uint8_t*) {{}}' for f in missing)
+                              extra = "\n".join(f'extern "C" inline void {f}(PPCContext&, uint8_t*) {{}}' for f in missing)
                               open(p, "w", encoding="utf-8").write(txt + "\n" + extra + "\n")
 
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
