@@ -28,7 +28,7 @@ jobs:
       - name: Create 'py' command wrapper & install build tools + Wine
         run: |
           sudo dpkg --add-architecture i386
-          sudo apt-get update && sudo apt-get install -y ninja-build clang lld unzip curl file gzip wine wine32:i386
+          sudo apt-get update && sudo apt-get install -y ninja-build clang lld unzip curl wine wine32:i386
           pip install gdown capstone pefile
           echo '#!/usr/bin/env bash' | sudo tee /usr/local/bin/py
           echo 'if [ "$1" = "-3" ]; then shift; fi' | sudo tee -a /usr/local/bin/py
@@ -63,19 +63,11 @@ jobs:
           XEXP_FILE=$(find work_xex -iname "default.xexp" | head -n 1)
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex || true
           if [ -n "$XEXP_FILE" ]; then
-            echo "Downloading XexTool..."
-            curl -fL "https://github.com" -o work_tools/xextool.raw
-            file work_tools/xextool.raw
-            if file work_tools/xextool.raw | grep -q "gzip"; then
-              mv work_tools/xextool.raw work_tools/xextool.gz
-              gunzip -f work_tools/xextool.gz
-              mv work_tools/xextool work_tools/xextool.exe
-            elif file work_tools/xextool.raw | grep -q "PE32"; then
-              mv work_tools/xextool.raw work_tools/xextool.exe
-            else
-              unzip -o work_tools/xextool.raw -d work_tools/
-            fi
+            echo "Cloning XexTool repository..."
+            git clone --depth 1 https://github.com work_tools/xextool_repo || \
+            git clone --depth 1 https://github.com work_tools/xextool_repo
             XEXTOOL_EXE=$(find work_tools -iname "xextool.exe" | head -n 1)
+            ls -la "$XEXTOOL_EXE"
             WINEDEBUG=-all wine "$XEXTOOL_EXE" -p "$XEXP_FILE" work_xex/default.xex
           fi
 
