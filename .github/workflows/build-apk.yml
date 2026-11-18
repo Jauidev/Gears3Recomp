@@ -102,14 +102,17 @@ jobs:
           #include <cstddef>
 
           struct ShaderCacheEntry {{
+              uint64_t hash;
               const char* filename;
-              uint32_t stage;
-              size_t offset;
-              size_t size;
+              uint32_t spirvOffset;
+              uint32_t spirvSize;
+              uint32_t lateSpirvOffset;
+              uint32_t lateSpirvSize;
               uint32_t usedTextureMask;
+              uint32_t specConstantsMask;
           }};
 
-          inline constexpr uint8_t g_spirvCacheCompressedData[] = {{ {arr} }};
+          inline constexpr uint8_t g_compressedSpirvCache[] = {{ {arr} }};
           inline constexpr size_t g_spirvCacheCompressedSize = {len(zst)};
           inline constexpr size_t g_spirvCacheDecompressedSize = 0;
           inline constexpr ShaderCacheEntry g_shaderCacheEntries[] = {{}};
@@ -120,7 +123,6 @@ jobs:
           #include "shader_cache.h"
           EOF
           fi
-          cat games/gears_of_war_3/data/shader/shader_cache.h
 
       - name: Build native Android libs & package APK
         run: |
