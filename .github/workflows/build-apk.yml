@@ -98,14 +98,22 @@ jobs:
               f.write(f"""#pragma once
           #include <cstdint>
           #include <cstddef>
+          #include <fmt/format.h>
 
           struct FilenameBuf {{
-              char buf[64]{{}};
+              char buf[128]{{}};
               constexpr FilenameBuf() = default;
               constexpr FilenameBuf(std::nullptr_t) {{}}
               constexpr FilenameBuf(const char*) {{}}
               operator char*() {{ return buf; }}
               operator const char*() const {{ return buf; }}
+          }};
+
+          template <>
+          struct fmt::formatter<FilenameBuf> : fmt::formatter<const char*> {{
+              auto format(const FilenameBuf& f, format_context& ctx) const {{
+                  return fmt::formatter<const char*>::format(f.buf, ctx);
+              }}
           }};
 
           struct ShaderCacheEntry {{
