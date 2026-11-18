@@ -90,20 +90,14 @@ jobs:
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build || true
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
-          import os, re, subprocess
-          shared_path = "games/gears_of_war_3/ppc/ppc_recomp_shared.h"
-          if os.path.exists(shared_path):
-              shared = open(shared_path, "r", encoding="utf-8", errors="ignore").read()
-              for root, _, files in os.walk("games/gears_of_war_3"):
-                  for fn in files:
-                      if fn.endswith("_functions.h"):
-                          p = os.path.join(root, fn)
-                          txt = open(p, "r", encoding="utf-8", errors="ignore").read()
-                          missing = [f for f in set(re.findall(r'sub_82[0-9A-Fa-f]{6}', txt)) if f"({f})" not in shared and f" {f}(" not in shared]
-                          if missing:
-                              print("Adding fallback declarations in", p, ":", missing)
-                              extra = "\n".join(f'extern "C" inline void {f}(PPCContext&, uint8_t*) {{}}' for f in missing)
-                              open(p, "w", encoding="utf-8").write(txt + "\n" + extra + "\n")
+          import os, subprocess
+          x3d_path = "games/gears_of_war_3/x3d/xd3d_functions.h"
+          if os.path.exists(x3d_path):
+              txt = open(x3d_path, "r", encoding="utf-8", errors="ignore").read()
+              if "sub_82B03550" in txt and "void sub_82B03550" not in txt:
+                  txt += '\nextern "C" inline void sub_82B03550(PPCContext&, uint8_t*) {}\n'
+                  open(x3d_path, "w", encoding="utf-8").write(txt)
+                  print("Added single stub for sub_82B03550")
 
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
           zst = open("empty.zst", "rb").read()
