@@ -110,7 +110,7 @@ jobs:
               uint32_t usedTextureMask;
               uint32_t specConstantsMask;
               const char* filename;
-              uint32_t usedSamplerBindings[8];
+              uint32_t usedSamplerBindings;
           }};
 
           inline constexpr uint8_t g_compressedSpirvCache[] = {{ {arr} }};
@@ -138,7 +138,6 @@ jobs:
           sed -i 's/\.bat//g' tools/build-apk.sh
           sed -i 's/\.exe//g' tools/build-apk.sh
           sed -i 's/windows-x86_64/linux-x86_64/g' tools/build-apk.sh
-          sed -i 's/ninja/ninja -j2/g' tools/build-android.sh || true
           XPORT_GAME=gears_of_war_3 bash tools/build-android.sh xportapp
           XPORT_GAME=gears_of_war_3 bash tools/build-apk.sh
 
