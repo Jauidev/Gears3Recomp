@@ -65,7 +65,8 @@ jobs:
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex || true
           if [ -n "$XEXP_FILE" ] && [ -n "$XEXTOOL_EXE" ]; then
             echo "Applying TU6 patch with bundled XexTool..."
-            WINEDEBUG=-all wine "$XEXTOOL_EXE" -p "$XEXP_FILE" work_xex/default.xex
+            WINEDEBUG=-all wine "$XEXTOOL_EXE" -e u -c u -o work_xex/default_patched.xex -p "$XEXP_FILE" work_xex/default.xex
+            mv work_xex/default_patched.xex work_xex/default.xex
           fi
 
       - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
