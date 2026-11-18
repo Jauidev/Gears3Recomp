@@ -19,7 +19,7 @@
 #define XD3D_GpuHangHandler sub_82B08120  // by hand: what GpuWaitCheck (82AF98D8) calls after 5000 ticks without progress, with the device
 #define XD3D_GpuWaitCheck sub_82AF98D8  // by hand: one turn of D3D's GPU waits (state on the caller's stack: device, reason, read pointer, progress tick, start tick, start timebase +20, as Gears' 8222F460); called by the ring-space wait 82AF59B8 (in Swap), 82AF47F8, 82AF4E28, 82AF6B10, 82AFDFB0, 82AFEAB0
 #define XD3D_KickOff sub_82AF5008  // by hand: the only writer of CP_RB_WPTR (0x7FC80000 + 1812), (device, ...)
-#define XD3D_InitDisplay sub_82B03550  // alike, 0.917: check it
+#define XD3D_InitDisplay sub_82893550  // alike, 0.917: check it
 #define XD3D_InitVertexShader sub_82AF2910  // called by CreateVertexShader
 #define XD3D_LockResource sub_82AE8E40  // by hand: GTA 829D8F78: same arguments, andi. 4112, +12 / +8 by the flags
 #define XD3D_LockTextureRect sub_82AEE798  // by hand: inlined: the worker both locks call (texture, array index, level, flags, ...); UE3 (8287BAF0, 8287D410, 82966208, 82966CE8) calls it itself, LockTextureRectArray (82AEE858) too (the hooks read it so: XD3D_XDK_20500)
@@ -86,7 +86,7 @@ PPC_FUNC_IMPL(__imp__sub_82AEFF00);
 PPC_FUNC_IMPL(__imp__sub_82B08120);
 PPC_FUNC_IMPL(__imp__sub_82AF98D8);
 PPC_FUNC_IMPL(__imp__sub_82AF5008);
-PPC_FUNC_IMPL(__imp__sub_82B03550);
+PPC_FUNC_IMPL(__imp__sub_82893550);
 PPC_FUNC_IMPL(__imp__sub_82AF2910);
 PPC_FUNC_IMPL(__imp__sub_82AE8E40);
 PPC_FUNC_IMPL(__imp__sub_82AEE798);
