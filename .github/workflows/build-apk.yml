@@ -88,10 +88,18 @@ jobs:
       - name: Run port.py & generate valid shader cache headers
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
-          find games/gears_of_war_3 -name "x3d_functions.h" -exec sed -i 's/sub_82833550/sub_82893550/g; s/sub_8289355O/sub_82893550/g' {} +
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
-          import subprocess
+          import os, subprocess
+          for root, _, files in os.walk("games/gears_of_war_3"):
+              for fn in files:
+                  if fn.endswith(".h"):
+                      p = os.path.join(root, fn)
+                      txt = open(p, "r", encoding="utf-8", errors="ignore").read()
+                      if "sub_82833550" in txt:
+                          open(p, "w", encoding="utf-8").write(txt.replace("sub_82833550", "sub_82893550"))
+                          print("Patched:", p)
+
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
           zst = open("empty.zst", "rb").read()
           arr = ", ".join(f"0x{b:02x}" for b in zst)
