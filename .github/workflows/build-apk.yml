@@ -85,24 +85,27 @@ jobs:
           chmod +x bin/*.exe
           ./bin/xexinfo.exe work_xex/default.xex || true
 
-      - name: Run port.py & generate shader cache
+      - name: Run port.py & generate shader cache headers
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
           mkdir -p games/gears_of_war_3/data/shader
-          if [ ! -f games/gears_of_war_3/data/shader/shader_cache.cpp ]; then
-            find work_port -iname "shader_cache.cpp" -exec cp {} games/gears_of_war_3/data/shader/ \;
+          find work_port -iname "shader_cache.*" -exec cp {} games/gears_of_war_3/data/shader/ \; || true
+          if [ ! -f games/gears_of_war_3/data/shader/shader_cache.h ]; then
+            cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.h
+          #pragma once
+          #include <cstdint>
+          #include <cstddef>
+          struct ShaderCacheEntry { uint64_t hash; const void* spirv; size_t spirv_size; const void* dxil; size_t dxil_size; };
+          inline constexpr ShaderCacheEntry g_shader_cache_entries[] = {};
+          inline constexpr size_t g_shader_cache_entry_count = 0;
+          EOF
           fi
           if [ ! -f games/gears_of_war_3/data/shader/shader_cache.cpp ]; then
             cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.cpp
-          #include <cstdint>
-          #include <cstddef>
-          extern "C" {
-            const uint8_t g_shader_cache_data[] = {0};
-            const size_t g_shader_cache_size = 0;
-          }
+          #include "shader_cache.h"
           EOF
           fi
-          ls -la games/gears_of_war_3/ppc/ games/gears_of_war_3/data/shader/
+          ls -la games/gears_of_war_3/data/shader/
 
       - name: Build native Android libs & package APK
         run: |
