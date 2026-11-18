@@ -164,7 +164,10 @@ jobs:
 
       - name: Build native Android libs & package APK
         env:
-          CMAKE_BUILD_PARALLEL_LEVEL: "2"
+          CMAKE_BUILD_PARALLEL_LEVEL: "3"
+          CXXFLAGS: "-g0"
+          CFLAGS: "-g0"
+          LDFLAGS: "-Wl,--no-keep-memory -Wl,--strip-debug"
           NINJA_STATUS: "[%f/%t] "
         run: |
           export USERPROFILE="$HOME"
