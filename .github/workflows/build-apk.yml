@@ -56,18 +56,15 @@ jobs:
         env:
           XEX_URL: ${{ secrets.XEX_DOWNLOAD_URL }}
         run: |
-          mkdir -p work_xex work_tools
+          mkdir -p work_xex
           gdown "$XEX_URL" -O work_xex/xex.zip
           unzip -o work_xex/xex.zip -d work_xex/
           XEX_FILE=$(find work_xex -iname "default.xex" | head -n 1)
           XEXP_FILE=$(find work_xex -iname "default.xexp" | head -n 1)
+          XEXTOOL_EXE=$(find work_xex -iname "xextool.exe" | head -n 1)
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex || true
-          if [ -n "$XEXP_FILE" ]; then
-            echo "Cloning XexTool repository..."
-            git clone --depth 1 https://github.com work_tools/xextool_repo || \
-            git clone --depth 1 https://github.com work_tools/xextool_repo
-            XEXTOOL_EXE=$(find work_tools -iname "xextool.exe" | head -n 1)
-            ls -la "$XEXTOOL_EXE"
+          if [ -n "$XEXP_FILE" ] && [ -n "$XEXTOOL_EXE" ]; then
+            echo "Applying TU6 patch with bundled XexTool..."
             WINEDEBUG=-all wine "$XEXTOOL_EXE" -p "$XEXP_FILE" work_xex/default.xex
           fi
 
