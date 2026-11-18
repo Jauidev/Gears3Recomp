@@ -96,8 +96,8 @@ jobs:
                   if fn.endswith(".h"):
                       p = os.path.join(root, fn)
                       txt = open(p, "r", encoding="utf-8", errors="ignore").read()
-                      if "sub_82833550" in txt:
-                          open(p, "w", encoding="utf-8").write(txt.replace("sub_82833550", "sub_82893550"))
+                      if "sub_82803550" in txt:
+                          open(p, "w", encoding="utf-8").write(txt.replace("sub_82803550", "sub_82893550"))
                           print("Patched:", p)
 
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
