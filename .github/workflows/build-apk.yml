@@ -103,14 +103,14 @@ jobs:
 
           struct ShaderCacheEntry {{
               uint64_t hash;
-              const char* filename;
               uint32_t spirvOffset;
               uint32_t spirvSize;
               uint32_t lateSpirvOffset;
               uint32_t lateSpirvSize;
               uint32_t usedTextureMask;
               uint32_t specConstantsMask;
-              uint32_t reserved[8];
+              const char* filename;
+              uint32_t usedSamplerBindings[8];
           }};
 
           inline constexpr uint8_t g_compressedSpirvCache[] = {{ {arr} }};
