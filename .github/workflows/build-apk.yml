@@ -111,6 +111,7 @@ jobs:
               uint32_t f8;
               uint32_t specConstantsMask;
               const char* filename;
+              uint32_t f11;
           }};
 
           inline constexpr uint8_t g_compressedSpirvCache[] = {{ {arr} }};
