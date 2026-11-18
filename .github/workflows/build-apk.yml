@@ -99,6 +99,15 @@ jobs:
           #include <cstdint>
           #include <cstddef>
 
+          struct FilenameBuf {{
+              char buf[64]{{}};
+              constexpr FilenameBuf() = default;
+              constexpr FilenameBuf(std::nullptr_t) {{}}
+              constexpr FilenameBuf(const char*) {{}}
+              operator char*() {{ return buf; }}
+              operator const char*() const {{ return buf; }}
+          }};
+
           struct ShaderCacheEntry {{
               uint64_t hash;
               uint32_t f1;
@@ -111,7 +120,7 @@ jobs:
               uint32_t f8;
               uint32_t specConstantsMask;
               uint32_t f10;
-              char filename[64];
+              FilenameBuf filename;
               uint32_t f12;
           }};
 
