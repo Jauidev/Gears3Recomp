@@ -20,6 +20,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Add 8GB swap space on /mnt to prevent linker OOM
+        run: |
+          sudo fallocate -l 8G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          free -h
+
       - name: Setup Python & Windows 'py' shim for Linux
         uses: actions/setup-python@v5
         with:
@@ -164,7 +172,7 @@ jobs:
 
       - name: Build native Android libs & package APK
         env:
-          CMAKE_BUILD_PARALLEL_LEVEL: "3"
+          CMAKE_BUILD_PARALLEL_LEVEL: "4"
           NINJA_STATUS: "[%f/%t] "
         run: |
           export USERPROFILE="$HOME"
@@ -175,8 +183,7 @@ jobs:
           sed -i 's/\.bat//g' tools/build-apk.sh
           sed -i 's/\.exe//g' tools/build-apk.sh
           sed -i 's/windows-x86_64/linux-x86_64/g' tools/build-apk.sh
-          find . -maxdepth 4 -name "CMakeLists.txt" -exec sed -i 's/-O3/-O1 -g0/g' {} +
-          sed -i 's/-DCMAKE_BUILD_TYPE=Release/-DCMAKE_BUILD_TYPE=Release -DCMAKE_SHARED_LINKER_FLAGS="-Wl,--no-keep-memory -Wl,--strip-debug"/g' tools/build-android.sh || true
+          sed -i 's/-DCMAKE_BUILD_TYPE=Release/-DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE="-O1 -g0 -DNDEBUG" -DCMAKE_C_FLAGS_RELEASE="-O1 -g0 -DNDEBUG" -DCMAKE_SHARED_LINKER_FLAGS="-Wl,--no-keep-memory -Wl,--strip-debug -Wl,--threads=1"/g' tools/build-android.sh
           XPORT_GAME=gears_of_war_3 bash tools/build-android.sh xportapp
           XPORT_GAME=gears_of_war_3 bash tools/build-apk.sh
 
