@@ -99,7 +99,7 @@ jobs:
               f.write(f"""#pragma once
           #include <cstdint>
           #include <cstddef>
-          #include <fmt/format.h>
+          #include <string_view>
 
           struct FilenameBuf {{
               char buf{{}};
@@ -110,12 +110,7 @@ jobs:
               operator const char*() const {{ return buf; }}
           }};
 
-          template <>
-          struct fmt::formatter<FilenameBuf> : fmt::formatter<const char*> {{
-              auto format(const FilenameBuf& f, format_context& ctx) const {{
-                  return fmt::formatter<const char*>::format(f.buf, ctx);
-              }}
-          }};
+          inline std::string_view format_as(const FilenameBuf& f) {{ return f.buf; }}
 
           struct ShaderCacheEntry {{
               uint64_t hash;
