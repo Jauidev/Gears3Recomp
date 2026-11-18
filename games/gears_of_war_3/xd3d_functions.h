@@ -110,3 +110,4 @@ PPC_FUNC_IMPL(__imp__sub_82AF2AF8);
 PPC_FUNC_IMPL(__imp__sub_82AF6B10);
 PPC_FUNC_IMPL(__imp__sub_82AEBE00);
 PPC_FUNC_IMPL(__imp__sub_82AE9140);
+inline void sub_82893550(PPCContext&, uint8_t*) {}
