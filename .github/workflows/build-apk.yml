@@ -99,18 +99,19 @@ jobs:
               f.write(f"""#pragma once
           #include <cstdint>
           #include <cstddef>
+          #include <array>
           #include <string_view>
 
           struct FilenameBuf {{
-              char buf{{}};
+              std::array<char, 256> buf{{}};
               constexpr FilenameBuf() = default;
               constexpr FilenameBuf(std::nullptr_t) {{}}
               constexpr FilenameBuf(const char*) {{}}
-              operator char*() {{ return buf; }}
-              operator const char*() const {{ return buf; }}
+              operator char*() {{ return buf.data(); }}
+              operator const char*() const {{ return buf.data(); }}
           }};
 
-          inline std::string_view format_as(const FilenameBuf& f) {{ return f.buf; }}
+          inline std::string_view format_as(const FilenameBuf& f) {{ return f.buf.data(); }}
 
           struct ShaderCacheEntry {{
               uint64_t hash;
