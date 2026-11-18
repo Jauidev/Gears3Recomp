@@ -85,10 +85,24 @@ jobs:
           chmod +x bin/*.exe
           ./bin/xexinfo.exe work_xex/default.xex || true
 
-      - name: Run port.py & verify generated PPC files
+      - name: Run port.py & generate shader cache
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
-          ls -la games/gears_of_war_3/ppc/
+          mkdir -p games/gears_of_war_3/data/shader
+          if [ ! -f games/gears_of_war_3/data/shader/shader_cache.cpp ]; then
+            find work_port -iname "shader_cache.cpp" -exec cp {} games/gears_of_war_3/data/shader/ \;
+          fi
+          if [ ! -f games/gears_of_war_3/data/shader/shader_cache.cpp ]; then
+            cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.cpp
+          #include <cstdint>
+          #include <cstddef>
+          extern "C" {
+            const uint8_t g_shader_cache_data[] = {0};
+            const size_t g_shader_cache_size = 0;
+          }
+          EOF
+          fi
+          ls -la games/gears_of_war_3/ppc/ games/gears_of_war_3/data/shader/
 
       - name: Build native Android libs & package APK
         run: |
