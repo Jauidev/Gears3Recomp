@@ -111,7 +111,7 @@ jobs:
               uint32_t f8;
               uint32_t specConstantsMask;
               uint32_t f10;
-              const char* filename;
+              char filename[64];
               uint32_t f12;
           }};
 
