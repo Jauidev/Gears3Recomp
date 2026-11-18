@@ -110,7 +110,6 @@ jobs:
               uint32_t usedTextureMask;
               uint32_t specConstantsMask;
               const char* filename;
-              uint32_t usedSamplerBindings;
           }};
 
           inline constexpr uint8_t g_compressedSpirvCache[] = {{ {arr} }};
