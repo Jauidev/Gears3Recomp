@@ -126,6 +126,9 @@ jobs:
           fi
 
       - name: Build native Android libs & package APK
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: "2"
+          NINJA_STATUS: "[%f/%t] "
         run: |
           export USERPROFILE="$HOME"
           mkdir -p "$HOME/.android"
@@ -135,6 +138,7 @@ jobs:
           sed -i 's/\.bat//g' tools/build-apk.sh
           sed -i 's/\.exe//g' tools/build-apk.sh
           sed -i 's/windows-x86_64/linux-x86_64/g' tools/build-apk.sh
+          sed -i 's/ninja/ninja -j2/g' tools/build-android.sh || true
           XPORT_GAME=gears_of_war_3 bash tools/build-android.sh xportapp
           XPORT_GAME=gears_of_war_3 bash tools/build-apk.sh
 
