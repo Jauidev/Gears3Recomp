@@ -88,6 +88,7 @@ jobs:
       - name: Run port.py & generate valid shader cache headers
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
+          sed -i 's/sub_8289355O/sub_82893550/g' games/gears_of_war_3/x3d_functions.h
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
           import subprocess
@@ -101,7 +102,7 @@ jobs:
           #include <fmt/format.h>
 
           struct FilenameBuf {{
-              char buf[128]{{}};
+              char buf{{}};
               constexpr FilenameBuf() = default;
               constexpr FilenameBuf(std::nullptr_t) {{}}
               constexpr FilenameBuf(const char*) {{}}
