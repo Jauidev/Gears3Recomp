@@ -102,7 +102,7 @@ jobs:
           #include <string_view>
 
           struct FilenameBuf {{
-              char buf{{}};
+              char buf[256]{{}};
               constexpr FilenameBuf() = default;
               constexpr FilenameBuf(std::nullptr_t) {{}}
               constexpr FilenameBuf(const char*) {{}}
