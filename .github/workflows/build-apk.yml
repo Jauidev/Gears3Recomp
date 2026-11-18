@@ -165,9 +165,6 @@ jobs:
       - name: Build native Android libs & package APK
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: "3"
-          CXXFLAGS: "-g0"
-          CFLAGS: "-g0"
-          LDFLAGS: "-Wl,--no-keep-memory -Wl,--strip-debug"
           NINJA_STATUS: "[%f/%t] "
         run: |
           export USERPROFILE="$HOME"
@@ -178,6 +175,8 @@ jobs:
           sed -i 's/\.bat//g' tools/build-apk.sh
           sed -i 's/\.exe//g' tools/build-apk.sh
           sed -i 's/windows-x86_64/linux-x86_64/g' tools/build-apk.sh
+          find . -maxdepth 4 -name "CMakeLists.txt" -exec sed -i 's/-O3/-O1 -g0/g' {} +
+          sed -i 's/-DCMAKE_BUILD_TYPE=Release/-DCMAKE_BUILD_TYPE=Release -DCMAKE_SHARED_LINKER_FLAGS="-Wl,--no-keep-memory -Wl,--strip-debug"/g' tools/build-android.sh || true
           XPORT_GAME=gears_of_war_3 bash tools/build-android.sh xportapp
           XPORT_GAME=gears_of_war_3 bash tools/build-apk.sh
 
