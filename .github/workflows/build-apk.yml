@@ -88,10 +88,22 @@ jobs:
       - name: Run port.py & generate valid shader cache headers
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
-          find games/gears_of_war_3 -name "x3d_functions.h" -exec sed -i 's/sub_82B03550/sub_82893550/g' {} +
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
-          import subprocess
+          import os, re, subprocess
+          shared = open("games/gears_of_war_3/ppc/ppc_recomp_shared.h", "r", encoding="utf-8", errors="ignore").read()
+          x3d_path = "games/gears_of_war_3/x3d/x3d_functions.h"
+          x3d = open(x3d_path, "r", encoding="utf-8", errors="ignore").read()
+          missing = []
+          for fn in set(re.findall(r'sub_82[0-9A-Fa-f]{6}', x3d)):
+              if f"({fn})" not in shared and f" {fn}(" not in shared:
+                  missing.append(fn)
+          if missing:
+              print("Adding fallback declarations for TU6 shifted funcs:", missing)
+              extra = "\n".join(f"extern \"C\" inline void {fn}(PPCRegister&, uint8_t*) {{}}" for fn in missing)
+              x3d = x3d + "\n" + extra + "\n"
+              open(x3d_path, "w", encoding="utf-8").write(x3d)
+
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
           zst = open("empty.zst", "rb").read()
           arr = ", ".join(f"0x{b:02x}" for b in zst)
