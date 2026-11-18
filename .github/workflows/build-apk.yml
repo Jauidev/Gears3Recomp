@@ -88,7 +88,7 @@ jobs:
       - name: Run port.py & generate valid shader cache headers
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
-          sed -i 's/sub_8289355O/sub_82893550/g' games/gears_of_war_3/x3d_functions.h
+          find games/gears_of_war_3 -name "x3d_functions.h" -exec sed -i 's/sub_8289355O/sub_82893550/g' {} +
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
           import subprocess
