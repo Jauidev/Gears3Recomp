@@ -88,6 +88,7 @@ jobs:
       - name: Run port.py & generate valid shader cache headers
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
+          find games/gears_of_war_3 -name "x3d_functions.h" -exec sed -i 's/sub_82B03550/sub_82893550/g' {} +
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
           import subprocess
@@ -152,7 +153,6 @@ jobs:
           sed -i 's/\.bat//g' tools/build-apk.sh
           sed -i 's/\.exe//g' tools/build-apk.sh
           sed -i 's/windows-x86_64/linux-x86_64/g' tools/build-apk.sh
-          sed -i 's/cmake --build/find games\/gears_of_war_3 -name "x3d_functions.h" -exec sed -i "s\/sub_82803550\/sub_82893550\/g" {} + \&\& cmake --build/g' tools/build-android.sh
           XPORT_GAME=gears_of_war_3 bash tools/build-android.sh xportapp
           XPORT_GAME=gears_of_war_3 bash tools/build-apk.sh
 
