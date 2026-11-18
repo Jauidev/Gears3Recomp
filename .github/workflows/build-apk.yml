@@ -96,9 +96,6 @@ jobs:
       - name: Run port.py & resolve TU6 hook symbols
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build || true
-          if [ -f tools/find_d3d.py ]; then
-            python3 tools/find_d3d.py work_xex/default.xex games/gears_of_war_3/x3d/xd3d_functions.h || true
-          fi
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
           import os, re, subprocess
