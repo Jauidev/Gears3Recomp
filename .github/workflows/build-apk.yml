@@ -94,10 +94,11 @@ jobs:
           x3d_path = "games/gears_of_war_3/x3d/xd3d_functions.h"
           if os.path.exists(x3d_path):
               txt = open(x3d_path, "r", encoding="utf-8", errors="ignore").read()
-              if "sub_82B03550" in txt and "void sub_82B03550" not in txt:
-                  txt += '\nextern "C" inline void sub_82B03550(PPCContext&, uint8_t*) {}\n'
-                  open(x3d_path, "w", encoding="utf-8").write(txt)
-                  print("Added single stub for sub_82B03550")
+              for fn in ("sub_82893550", "sub_82B03550"):
+                  if fn in txt and f"void {fn}" not in txt:
+                      txt += f'\nextern "C" inline void {fn}(PPCContext&, uint8_t*) {{}}\n'
+              open(x3d_path, "w", encoding="utf-8").write(txt)
+              print("Updated xd3d_functions.h with InitDisplay stub")
 
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
           zst = open("empty.zst", "rb").read()
