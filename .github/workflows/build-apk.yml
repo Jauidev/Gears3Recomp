@@ -110,6 +110,7 @@ jobs:
               uint32_t lateSpirvSize;
               uint32_t usedTextureMask;
               uint32_t specConstantsMask;
+              uint32_t reserved[8];
           }};
 
           inline constexpr uint8_t g_compressedSpirvCache[] = {{ {arr} }};
