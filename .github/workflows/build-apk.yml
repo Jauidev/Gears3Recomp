@@ -89,8 +89,10 @@ jobs:
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
           mkdir -p games/gears_of_war_3/data/shader
-          find work_port -iname "shader_cache.*" -exec cp {} games/gears_of_war_3/data/shader/ \; || true
-          if [ ! -f games/gears_of_war_3/data/shader/shader_cache.h ]; then
+          EXISTING_H=$(find third_party work_port -iname "shader_cache.h" | head -n 1)
+          if [ -n "$EXISTING_H" ]; then
+            cp "$EXISTING_H" games/gears_of_war_3/data/shader/shader_cache.h
+          else
             python3 - << 'PYEOF'
           import subprocess
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
@@ -110,6 +112,7 @@ jobs:
               uint32_t usedTextureMask;
               uint32_t specConstantsMask;
               const char* filename;
+              uint32_t extra = 0;
           }};
 
           inline constexpr uint8_t g_compressedSpirvCache[] = {{ {arr} }};
@@ -119,10 +122,10 @@ jobs:
           inline constexpr size_t g_shaderCacheEntryCount = 0;
           """)
           PYEOF
-            cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.cpp
+          fi
+          cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.cpp
           #include "shader_cache.h"
           EOF
-          fi
 
       - name: Build native Android libs & package APK
         env:
