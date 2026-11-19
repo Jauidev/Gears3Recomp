@@ -181,6 +181,7 @@ jobs:
           sed -i 's/\.bat//g' tools/build-apk.sh
           sed -i 's/\.exe//g' tools/build-apk.sh
           sed -i 's/windows-x86_64/linux-x86_64/g' tools/build-apk.sh
+          sed -i 's/sub_82CE4FF8/sub_82C24FF8/g; s/sub_82CE4C88/sub_825E4C88/g' games/gears_of_war_3/game.cpp
           sed -i 's/-DCMAKE_BUILD_TYPE=Release/-DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE="-O1 -g0 -DNDEBUG" -DCMAKE_C_FLAGS_RELEASE="-O1 -g0 -DNDEBUG" -DCMAKE_SHARED_LINKER_FLAGS="-Wl,--no-keep-memory -Wl,--strip-debug -Wl,--threads=1"/g' tools/build-android.sh
           XPORT_GAME=gears_of_war_3 bash tools/build-android.sh xportapp
           XPORT_GAME=gears_of_war_3 bash tools/build-apk.sh
