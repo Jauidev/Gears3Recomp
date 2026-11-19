@@ -141,10 +141,10 @@ jobs:
           gcpp = "games/gears_of_war_3/game.cpp"
           if os.path.exists(gcpp):
               gt = open(gcpp, "r", encoding="utf-8", errors="ignore").read()
-              if "MaxSmoothedFrameRate" not in gt:
+              if "0x42700000" not in gt:
                   gt = gt.replace(
                       "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");",
-                      "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");\n    if (settings != 0) { PPC_STORE_U32(settings + 44, 0); PPC_STORE_F32(settings + 48, 60.0f); }"
+                      "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");\n    if (settings != 0) { PPC_STORE_U32(settings + 44, 0); PPC_STORE_U32(settings + 48, 0x42700000); }"
                   )
                   open(gcpp, "w", encoding="utf-8").write(gt)
                   print("Unlocked 60 FPS cap in game.cpp")
