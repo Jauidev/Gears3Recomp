@@ -6,6 +6,7 @@
 #include <kernel/memory.h>
 #include <os/logger.h>
 #include <os/paths.h>
+#include <atomic>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -15,18 +16,46 @@ uint32_t MmQueryAddressProtect(uint32_t address); // kernel/vmem.cpp
 
 extern "C" PPC_FUNC(__imp__sub_829815C8);
 
-// sub_829815C8: Evita crash signal 11 cuando [r3 + 4] es nulo (0x00000000)
+// sub_829815C8: Evita crash signal 11 cuando [r3 + 4] es nulo (0x00000000).
+// Si r3 es nulo o [r3+4] es nulo, el original crashea al desreferenciar.
+// Log una vez por caso y devuelve 0 sin llamar al original.
 PPC_FUNC(sub_829815C8)
 {
-    if (ctx.r3.u32 == 0 || PPC_LOAD_U32(ctx.r3.u32 + 4) == 0)
+    if (ctx.r3.u32 == 0)
     {
         static std::atomic<int> s_logged{ 0 };
         if (s_logged.fetch_add(1) < 4)
-            LOGF_WARNING("sub_829815C8: estructura nula omitida (r3=0x{:08X})", ctx.r3.u32);
+            LOGF_WARNING("sub_829815C8: r3 nulo, se omite");
+        ctx.r3.u64 = 0;
+        return;
+    }
+    if (PPC_LOAD_U32(ctx.r3.u32 + 4) == 0)
+    {
+        static std::atomic<int> s_logged{ 0 };
+        if (s_logged.fetch_add(1) < 4)
+            LOGF_WARNING("sub_829815C8: [r3+4] nulo (r3=0x{:08X}), se omite", ctx.r3.u32);
         ctx.r3.u64 = 0;
         return;
     }
     __imp__sub_829815C8(ctx, base);
+}
+
+extern "C" PPC_FUNC(__imp__sub_8297D7B4);
+
+// sub_8297D7B4: Crash signal 11 en Adreno 735 (fault 0x100000000).
+// r11 contiene 0xA110CA73, un valor que parece dato, no offset.
+// Un límite conservador para índices de arrays del juego.
+PPC_FUNC(sub_8297D7B4)
+{
+    if (ctx.r11.u32 > 0x1000000)
+    {
+        static std::atomic<int> s_logged{ 0 };
+        if (s_logged.fetch_add(1) < 4)
+            LOGF_WARNING("sub_8297D7B4: r11 inválido 0x{:08X}, se omite", ctx.r11.u32);
+        ctx.r3.u64 = 0;
+        return;
+    }
+    __imp__sub_8297D7B4(ctx, base);
 }
 
 extern "C" PPC_FUNC(__imp__sub_8295A518);
@@ -43,26 +72,36 @@ PPC_EXTERN_FUNC(sub_82CE4C88); // VirtualFree(address, size, type)
 PPC_FUNC(sub_8295A518)
 {
     const uint32_t pointer = ctx.r4.u32;
+    const uint32_t self = ctx.r3.u32;
     if (pointer >= 0xA0000000 && pointer < 0xC0000000)
     {
+        if (self == 0)
+        {
+            LOGF_WARNING("sub_8295A518: self nulo, se ignora Free de 0x{:08X}", pointer);
+            ctx.r3.u64 = pointer;
+            return;
+        }
         constexpr uint32_t X_MEM_LARGE_PAGES = 0x20000000;
         constexpr uint32_t X_MEM_16MB_PAGES = 0x80000000;
         const uint32_t protect = MmQueryAddressProtect(pointer);
-        if (protect != 0 && !(protect & (X_MEM_LARGE_PAGES | X_MEM_16MB_PAGES)))
+        if (protect == 0)
         {
-            const uint32_t self = ctx.r3.u32;
+            LOGF_WARNING("sub_8295A518: dirección 0x{:08X} no mapeada, se ignora", pointer);
+            ctx.r3.u64 = pointer;
+            return;
+        }
+        if (!(protect & (X_MEM_LARGE_PAGES | X_MEM_16MB_PAGES)))
+        {
             static std::atomic<int> s_logged{ 0 };
             if (s_logged.fetch_add(1) < 4)
-                LOGF_WARNING("pooled Free of a 4 KB-page physical block 0x{:08X}: back to the OS", pointer);
+                LOGF_WARNING("pooled Free de bloque físico 0x{:08X}: de vuelta al OS", pointer);
             ctx.r3.u64 = pointer;
-            if (PPC_LOAD_U32(self + 12188) != 0) // set by the PhysicalAlloc/PhysicalFree wrappers
-            {
+            if (PPC_LOAD_U32(self + 12188) != 0)
                 sub_82CE4FF8(ctx, base);
-            }
             else
             {
                 ctx.r4.u64 = 0;
-                ctx.r5.u64 = 0x8000; // MEM_RELEASE
+                ctx.r5.u64 = 0x8000;
                 sub_82CE4C88(ctx, base);
             }
             return;
@@ -70,7 +109,6 @@ PPC_FUNC(sub_8295A518)
     }
     __imp__sub_8295A518(ctx, base);
 }
-
 static std::string GuestWideString(uint8_t* base, uint32_t address, uint32_t maxLength = 200)
 {
     std::string text;
@@ -211,17 +249,29 @@ static void DropLoaderMapCheckpoints()
         const uint32_t version = (u8(0) << 24) | (u8(1) << 16) | (u8(2) << 8) | u8(3);
         const uint32_t length = (u8(4) << 24) | (u8(5) << 16) | (u8(6) << 8) | u8(7);
         static const char kLoaderMap[] = "geargame_p";
-        bool loaderMap = version == 3 && length == sizeof(kLoaderMap) && u8(18) == 0;
-        for (size_t i = 0; loaderMap && i + 1 < sizeof(kLoaderMap); i++)
-            loaderMap = std::tolower(u8(8 + i)) == kLoaderMap[i];
+        constexpr uint32_t kLoaderMapLen = 11; // sin el nulo
+        bool loaderMap = (version == 3 && length == kLoaderMapLen && u8(18) == 0);
+        for (size_t i = 0; loaderMap && i < kLoaderMapLen; i++)
+            loaderMap = std::tolower(u8(8 + i)) == std::tolower(static_cast<uint8_t>(kLoaderMap[i]));
         if (!loaderMap)
             continue;
         const std::filesystem::path copy =
             os::paths::GetSavePath() / (path.filename().string() + ".geargame_p.bak");
+        // Copiar primero; si falla, NO vaciar el original
         std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, error);
+        if (error)
+        {
+            LOGF_ERROR("checkpoint {}: no se pudo copiar: {}", path.filename().string(), error.message());
+            continue;
+        }
+        error.clear();
         std::filesystem::resize_file(path, 0, error);
-        LOGF_WARNING("checkpoint {} was saved in the loader map GearGame_P: emptied ({}), copy in {}",
-                     path.filename().string(), error ? error.message() : "ok", copy.string());
+        if (error)
+        {
+            LOGF_ERROR("checkpoint {}: no se pudo vaciar: {}", path.filename().string(), error.message());
+            continue;
+        }
+        LOGF_WARNING("checkpoint {} vaciado, copia en {}", path.filename().string(), copy.string());
     }
 }
 
