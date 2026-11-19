@@ -194,7 +194,6 @@ jobs:
           cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.cpp
           #include "shader_cache.h"
           EOF
-
       - name: Build native Android libs & package APK
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: "2"
@@ -204,3 +203,31 @@ jobs:
           mkdir -p "$HOME/.android"
           keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           chmod +x tools/*.sh || true
+          for script in tools/build-android.sh tools/build-apk.sh; do
+            if [ -f "$script" ]; then
+              sed -i 's/\r$//' "$script"
+              sed -i 's/pwd -W/pwd/g' "$script"
+              sed -i 's/\.bat//g' "$script"
+              sed -i 's/\.exe//g' "$script"
+              sed -i 's/windows-x86_64/linux-x86_64/g' "$script"
+              sed -i 's/gta4/gears_of_war_3/g' "$script"
+            fi
+          done
+          sed -i 's/sub_82CE4FF8/sub_82C24FF8/g; s/sub_82CE4C88/sub_825E4C88/g' games/gears_of_war_3/game.cpp
+          bash tools/build-android.sh
+          bash tools/build-apk.sh
+
+      - name: Upload Gears 3 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GearsOfWar3-POCO-F6-APK
+          path: |
+            **/*.apk
+          if-no-files-found: error
+
+      - name: Upload Patched TU6 default.xex
+        uses: actions/upload-artifact@v4
+        with:
+          name: default-xex-TU6-patched
+          path: output_xex/default.xex
+          if-no-files-found: warn
