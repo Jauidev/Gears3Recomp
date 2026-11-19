@@ -152,7 +152,7 @@ jobs:
           if os.path.exists("CMakeLists.txt"):
               cm = open("CMakeLists.txt", "r", encoding="utf-8", errors="ignore").read()
               if "POCO_F6_OPT" not in cm:
-                  cm += '\n# POCO_F6_OPT\nif(ANDROID)\n  add_compile_options(-O3 -march=armv8.2-a+crypto+fp16+dotprod -mtune=cortex-a720 -ffast-math -fno-math-errno -fomit-frame-pointer)\nendif()\n'
+                  cm += '\n# POCO_F6_OPT\nif(ANDROID)\n  add_compile_options(-O3 -march=armv8.2-a+crypto+fp16+dotprod -mtune=cortex-a720 -fomit-frame-pointer)\nendif()\n'
                   open("CMakeLists.txt", "w", encoding="utf-8").write(cm)
 
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
