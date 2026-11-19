@@ -94,17 +94,12 @@ jobs:
           chmod +x bin/*.exe
           ./bin/xexinfo.exe work_xex/default.xex | tee xexinfo_out.txt
 
-      - name: Run port.py, bypass XEX hash check & apply POCO F6 optimizations
+      - name: Run port.py, allow TU6 XEX & apply POCO F6 optimizations
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
-          import os, re, hashlib, subprocess
-
-          xex_bytes = open("work_xex/default.xex", "rb").read()
-          tu6_sha1 = hashlib.sha1(xex_bytes).hexdigest().lower()
-          tu6_size = len(xex_bytes)
-          print(f"TU6 default.xex SHA1={tu6_sha1} SIZE={tu6_size}")
+          import os, re, subprocess
 
           info = open("xexinfo_out.txt", "r", encoding="utf-8", errors="ignore").read()
           m_ep = re.search(r'[Ee]ntry\s*[Pp]oint\s*[:=]\s*0x([0-9A-Fa-f]{8})', info)
@@ -117,27 +112,30 @@ jobs:
                       t = re.sub(r'(entry_point\s*=\s*0x)[0-9A-Fa-f]{8}', rf'\g<1>{ep_hex}', t)
                       t = re.sub(r'(sub_)[0-9A-Fa-f]{8}(\s*//\s*entry)', rf'\g<1>{ep_hex}\2', t)
                       open(p, "w", encoding="utf-8").write(t)
-          for search_dir in ("android", "games/gears_of_war_3", "LAUNCHER"):
-              if not os.path.exists(search_dir):
-                  continue
-              for root, _, files in os.walk(search_dir):
-                  for fn in files:
-                      if fn.endswith((".java", ".kt", ".cpp", ".h", ".json")):
-                          fp = os.path.join(root, fn)
-                          txt = open(fp, "r", encoding="utf-8", errors="ignore").read()
-                          orig = txt
-                          txt = re.sub(r'\b[0-9a-f]{40}\b', tu6_sha1, txt)
-                          txt = re.sub(r'\b[0-9A-F]{40}\b', tu6_sha1.upper(), txt)
-                          txt = re.sub(r'(expectedSize|xexSize|EXPECTED_XEX_SIZE)\s*=\s*\d+', rf'\g<1> = {tu6_size}', txt)
-                          if fn.endswith((".java", ".kt")):
-                              txt = re.sub(r'boolean\s+(isValidXex|verifyXex|checkXexHash|isCompatibleVersion)\s*\([^)]*\)\s*\{', r'boolean \1(...) { return true;', txt)
-                              txt = re.sub(r'fun\s+(isValidXex|verifyXex|checkXexHash|isCompatibleVersion)\s*\([^)]*\)\s*:\s*Boolean\s*\{', r'fun \1(...): Boolean { return true;', txt)
-                              if "setContentView" in txt and "LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES" not in txt:
-                                  cutout = "if (android.os.Build.VERSION.SDK_INT >= 28) { window.attributes.layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }; setContentView(" if fn.endswith(".kt") else "if (android.os.Build.VERSION.SDK_INT >= 28) { getWindow().getAttributes().layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES; } setContentView("
-                                  txt = txt.replace("setContentView(", cutout)
-                          if txt != orig:
-                              open(fp, "w", encoding="utf-8").write(txt)
-                              print("Patched XEX check / UI in:", fp)
+          gcmake = "games/gears_of_war_3/game.cmake"
+          if os.path.exists(gcmake):
+              gc = open(gcmake, "r", encoding="utf-8", errors="ignore").read()
+              gc = re.sub(r'(XPORT_XEX_VERSION\s+)0x[0-9A-Fa-f]+|\1\d+', r'\g<1>0', gc)
+              gc = re.sub(r'(XPORT_XEX_MEDIA\s+)0x[0-9A-Fa-f]+|\1\d+', r'\g<1>0', gc)
+              open(gcmake, "w", encoding="utf-8").write(gc)
+              print("Set XPORT_XEX_VERSION=0 and XPORT_XEX_MEDIA=0 in game.cmake")
+
+          lui = "runtime/os/launcher_ui.cpp"
+          if os.path.exists(lui):
+              lt = open(lui, "r", encoding="utf-8", errors="ignore").read()
+              lt = lt.replace("return mediaOk && versionOk ? 1 : -1;", "return 1;")
+              open(lui, "w", encoding="utf-8").write(lt)
+              print("Patched XexHeadGame in launcher_ui.cpp to accept TU6")
+
+          for root, _, files in os.walk("android"):
+              for fn in files:
+                  if fn.endswith((".java", ".kt")):
+                      jp = os.path.join(root, fn)
+                      jt = open(jp, "r", encoding="utf-8", errors="ignore").read()
+                      if "setContentView" in jt and "LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES" not in jt:
+                          cutout = "if (android.os.Build.VERSION.SDK_INT >= 28) { window.attributes.layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }; setContentView(" if fn.endswith(".kt") else "if (android.os.Build.VERSION.SDK_INT >= 28) { getWindow().getAttributes().layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES; } setContentView("
+                          jt = jt.replace("setContentView(", cutout)
+                          open(jp, "w", encoding="utf-8").write(jt)
 
           shared_path = "games/gears_of_war_3/ppc/ppc_recomp_shared.h"
           shared = open(shared_path, "r", encoding="utf-8", errors="ignore").read() if os.path.exists(shared_path) else ""
@@ -146,7 +144,7 @@ jobs:
               if "ppc" in root.split(os.sep):
                   continue
               for fn in files:
-                  if fn.endswith(".h") or fn.endswith(".cpp"):
+                  if fn.endswith((".h", ".cpp")):
                       txt = open(os.path.join(root, fn), "r", encoding="utf-8", errors="ignore").read()
                       imp_syms.update(re.findall(r'__imp__sub_82[0-9A-Fa-f]{6}', txt))
 
@@ -163,7 +161,6 @@ jobs:
               if "POCO_F6_OPT" not in cm:
                   cm += '\n# POCO_F6_OPT\nif(ANDROID)\n  add_compile_options(-O3 -march=armv8.2-a+crypto+fp16+dotprod -mtune=cortex-a720 -ffast-math -fno-math-errno -fomit-frame-pointer)\nendif()\n'
                   open("CMakeLists.txt", "w", encoding="utf-8").write(cm)
-                  print("Injected Snapdragon 8s Gen 3 flags into CMakeLists.txt")
 
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
           zst = open("empty.zst", "rb").read()
