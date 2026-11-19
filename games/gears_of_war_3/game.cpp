@@ -13,20 +13,21 @@
 
 uint32_t MmQueryAddressProtect(uint32_t address); // kernel/vmem.cpp
 
-extern "C" PPC_FUNC(__imp__sub_82F7CFDC);
+extern "C" PPC_FUNC(__imp__sub_8297D7B4);
 
-// sub_82F7CFDC: Evita crash signal 11 cuando [r3 + 4] es nulo (0x00000000)
-PPC_FUNC(sub_82F7CFDC)
+// sub_8297D7B4: El workflow lo resuelve automaticamente a la funcion padre exacta en TU6.
+// Evita crash signal 11 cuando la estructura pasada en r3 tiene el campo [r3 + 4] nulo (0x00000000).
+PPC_FUNC(sub_8297D7B4)
 {
     if (ctx.r3.u32 == 0 || PPC_LOAD_U32(ctx.r3.u32 + 4) == 0)
     {
         static std::atomic<int> s_logged{ 0 };
         if (s_logged.fetch_add(1) < 4)
-            LOGF_WARNING("sub_82F7CFDC: estructura con campo [r3+4] nulo omitida (r3=0x{:08X})", ctx.r3.u32);
+            LOGF_WARNING("sub_8297D7B4: estructura con campo [r3+4] nulo omitida (r3=0x{:08X})", ctx.r3.u32);
         ctx.r3.u64 = 0;
         return;
     }
-    __imp__sub_82F7CFDC(ctx, base);
+    __imp__sub_8297D7B4(ctx, base);
 }
 
 extern "C" PPC_FUNC(__imp__sub_8295A518);
