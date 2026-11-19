@@ -13,20 +13,21 @@
 
 uint32_t MmQueryAddressProtect(uint32_t address); // kernel/vmem.cpp
 
-extern "C" PPC_FUNC(__imp__sub_8297D770);
+extern "C" PPC_FUNC(__imp__sub_8298158C);
 
-// sub_8297D770: Intercepta llamadas directas cuando la estructura en r3 tiene [r3 + 4] nulo (0x00000000)
-PPC_FUNC(sub_8297D770)
+// sub_8298158C: Función padre en el backtrace (llama a 0x8297CFDC -> 0x8297D7B4).
+// Evita crash signal 11 cuando la estructura pasada tiene campos nulos en [r3 + 4].
+PPC_FUNC(sub_8298158C)
 {
     if (ctx.r3.u32 == 0 || PPC_LOAD_U32(ctx.r3.u32 + 4) == 0)
     {
         static std::atomic<int> s_logged{ 0 };
         if (s_logged.fetch_add(1) < 4)
-            LOGF_WARNING("sub_8297D770: puntero [r3+4] nulo bloqueado (r3=0x{:08X})", ctx.r3.u32);
+            LOGF_WARNING("sub_8298158C: estructura nula omitida (r3=0x{:08X})", ctx.r3.u32);
         ctx.r3.u64 = 0;
         return;
     }
-    __imp__sub_8297D770(ctx, base);
+    __imp__sub_8298158C(ctx, base);
 }
 
 extern "C" PPC_FUNC(__imp__sub_8295A518);
@@ -234,8 +235,8 @@ namespace game
 
     void RegisterExtraFunctions(Memory& memory)
     {
-        // Intercepta llamadas indirectas (vtable / bctr) hacia 0x8297D770 cuando [r3 + 4] es nulo
-        memory.InsertFunction(0x8297D770, sub_8297D770);
+        // Entry points the recompiler missed: memory.InsertFunction(address, function).
+        (void)memory;
     }
 
     const char* ThreadName(uint32_t startAddress, uint32_t startContext, uint32_t& entry)
