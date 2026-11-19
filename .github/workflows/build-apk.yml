@@ -73,8 +73,9 @@ jobs:
           fi
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex
           cp work_xex/default.xex output_xex/default.xex
-                - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
-         run: |
+
+      - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
+        run: |
           mkdir -p bin
           cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
           cmake --build build-xenonrecomp -j $(nproc)
@@ -151,7 +152,8 @@ jobs:
           inline constexpr std::array<uint8_t, {len(zst)}> kShaderCacheZst = {{{arr}}};
           """)
           PYEOF
-                    if [ ! -f games/gears_of_war_3/data/shader/shader_cache.cpp ]; then
+
+          if [ ! -f games/gears_of_war_3/data/shader/shader_cache.cpp ]; then
             cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.cpp
           #include "shader_cache.h"
           EOF
