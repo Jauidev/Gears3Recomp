@@ -1,4 +1,4 @@
-name: Build Gears 3 Android APK
+name: Build Gears 3 Android APK (30 FPS POCO F6 Optimized)
 
 on:
   workflow_dispatch:
@@ -55,7 +55,7 @@ jobs:
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> $GITHUB_ENV
           echo "PATH=$ANDROID_HOME/cmake/3.31.6/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Download decompressed default.xex
+      - name: Download clean base default.xex
         env:
           XEX_URL: ${{ secrets.XEX_DOWNLOAD_URL }}
         run: |
@@ -63,7 +63,7 @@ jobs:
             echo "::error::El secreto XEX_DOWNLOAD_URL esta vacio o no existe."
             exit 1
           fi
-          mkdir -p work_xex output_xex
+          mkdir -p work_xex
           gdown "$XEX_URL" -O work_xex/xex.zip
           unzip -o work_xex/xex.zip -d work_xex/
           XEX_FILE=$(find work_xex -iname "default.xex" | head -n 1)
@@ -72,7 +72,7 @@ jobs:
             exit 1
           fi
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex
-          cp work_xex/default.xex output_xex/default.xex
+
       - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
         run: |
           mkdir -p bin
@@ -84,19 +84,19 @@ jobs:
           clang++ -O2 -std=c++20 -Ithird_party/XenonRecomp/XenonUtils -Ithird_party/XenonRecomp/third_party/disasm -Ithird_party/XenonRecomp/third_party/fmt/include tools/xexinfo/xexinfo.cpp -Wl,--start-group $STATIC_LIBS -Wl,--end-group -o bin/xexinfo.exe
           chmod +x bin/*.exe
           ./bin/xexinfo.exe work_xex/default.xex | tee xexinfo_out.txt
-
-      - name: Run port.py, unlock 60 FPS & apply POCO F6 optimizations
+                - name: Run port.py, lock 30 FPS & apply POCO F6 12GB optimizations
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
           import os, re, subprocess
 
+          # 1. Sincronizar Entry Point exacto del default.xex base
           info = open("xexinfo_out.txt", "r", encoding="utf-8", errors="ignore").read()
           m_ep = re.search(r'[Ee]ntry\s*[Pp]oint\s*[:=]\s*0x([0-9A-Fa-f]{8})', info)
           if m_ep:
               ep_hex = m_ep.group(1).upper()
-              print("Detected Entry Point:", ep_hex)
+              print("Detected Base XEX Entry Point:", ep_hex)
               for p in ("games/gears_of_war_3/gears_of_war_3.toml", "games/gears_of_war_3/game.cpp"):
                   if os.path.exists(p):
                       t = open(p, "r", encoding="utf-8", errors="ignore").read()
@@ -104,6 +104,7 @@ jobs:
                       t = re.sub(r'(sub_)[0-9A-Fa-f]{8}(\s*//\s*entry)', rf'\g<1>{ep_hex}\2', t)
                       open(p, "w", encoding="utf-8").write(t)
 
+          # 2. Permitir cualquier version de disco base sin exigir Title Updates ni DLCs
           gcmake = "games/gears_of_war_3/game.cmake"
           if os.path.exists(gcmake):
               gc = open(gcmake, "r", encoding="utf-8", errors="ignore").read()
@@ -116,6 +117,8 @@ jobs:
               lt = open(lui, "r", encoding="utf-8", errors="ignore").read()
               lt = lt.replace("return mediaOk && versionOk ? 1 : -1;", "return 1;")
               open(lui, "w", encoding="utf-8").write(lt)
+
+          # 3. Soporte pantalla completa (Notch / Camara perforada POCO F6)
           for root, _, files in os.walk("android"):
               for fn in files:
                   if fn.endswith((".java", ".kt")):
@@ -126,23 +129,45 @@ jobs:
                           jt = jt.replace("setContentView(", cutout)
                           open(jp, "w", encoding="utf-8").write(jt)
 
+          # 4. Asegurar bloqueo fluido a 30.0 FPS (0x41F00000) con Frame Smoothing en game.cpp
           gcpp = "games/gears_of_war_3/game.cpp"
           if os.path.exists(gcpp):
               gt = open(gcpp, "r", encoding="utf-8", errors="ignore").read()
-              if "0x42700000" not in gt:
+              if "0x41F00000" not in gt:
                   gt = gt.replace(
                       "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");",
-                      "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");\n    if (settings != 0) { PPC_STORE_U32(settings + 44, 0); PPC_STORE_U32(settings + 48, 0x42700000); }"
+                      "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");\n    if (settings != 0) { PPC_STORE_U32(settings + 44, 1); PPC_STORE_U32(settings + 48, 0x41F00000); }"
                   )
                   open(gcpp, "w", encoding="utf-8").write(gt)
-                  print("Unlocked 60 FPS cap in game.cpp")
+                  print("Locked smooth 30 FPS cap in game.cpp")
 
+          # 5. Optimizaciones agresivas para Snapdragon 8s Gen 3 (Cortex-X4 / A720) + 12GB RAM
           if os.path.exists("CMakeLists.txt"):
               cm = open("CMakeLists.txt", "r", encoding="utf-8", errors="ignore").read()
               if "POCO_F6_OPT" not in cm:
-                  cm += '\n# POCO_F6_OPT\nif(ANDROID)\n  add_compile_options(-O3 -march=armv8.2-a+crypto+fp16+dotprod -mtune=cortex-a720 -fomit-frame-pointer)\nendif()\n'
+                  cm += '''
+          # POCO_F6_OPT (Snapdragon 8s Gen 3 - Cortex-X4/A720 - 12GB RAM)
+          if(ANDROID)
+            add_compile_options(
+              -O3
+              -march=armv8.2-a+crypto+fp16+dotprod+i8mm
+              -mtune=cortex-a720
+              -ffast-math
+              -fno-math-errno
+              -fomit-frame-pointer
+              -funroll-loops
+              -flto=thin
+            )
+            add_link_options(
+              -flto=thin
+              -Wl,-O3
+              -Wl,--gc-sections
+            )
+          endif()
+          '''
                   open("CMakeLists.txt", "w", encoding="utf-8").write(cm)
 
+          # 6. Cache SPIR-V limpia para compilacion directa en Adreno 735
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
           zst = open("empty.zst", "rb").read()
           arr = ", ".join(f"0x{b:02x}" for b in zst)
@@ -204,14 +229,8 @@ jobs:
       - name: Upload Gears 3 APK
         uses: actions/upload-artifact@v4
         with:
-          name: GearsOfWar3-POCO-F6-APK
+          name: GearsOfWar3-POCO-F6-30FPS-APK
           path: |
             **/*.apk
           if-no-files-found: error
-
-      - name: Upload Decompressed default.xex
-        uses: actions/upload-artifact@v4
-        with:
-          name: default-xex-decompressed
-          path: output_xex/default.xex
-          if-no-files-found: warn
+          
