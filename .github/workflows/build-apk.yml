@@ -13,7 +13,6 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,20 +31,15 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Create 'py' command wrapper & install build tools + Wine
+      - name: Create 'py' command wrapper & install build tools
         run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends \
-            -o Acquire::http::Timeout="15" -o Acquire::Retries="5" \
-            ninja-build clang lld unzip curl zstd wine wine32:i386
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends -o Acquire::http::Timeout="15" -o Acquire::Retries="5" ninja-build clang lld unzip curl zstd
           pip install gdown capstone pefile
-          echo '#!/usr/bin/env bash' | sudo tee /usr/local/bin/py
-          echo 'if [ "$1" = "-3" ]; then shift; fi' | sudo tee -a /usr/local/bin/py
-          echo 'exec python3 "$@"' | sudo tee -a /usr/local/bin/py
+          printf '#!/usr/bin/env bash\nif [ "$1" = "-3" ]; then shift; fi\nexec python3 "$@"\n' | sudo tee /usr/local/bin/py > /dev/null
           sudo chmod +x /usr/local/bin/py
 
       - name: Setup JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -61,24 +55,26 @@ jobs:
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> $GITHUB_ENV
           echo "PATH=$ANDROID_HOME/cmake/3.31.6/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Download default.xex + default.xexp and apply TU6 patch
+      - name: Download decompressed default.xex
         env:
           XEX_URL: ${{ secrets.XEX_DOWNLOAD_URL }}
         run: |
+          if [ -z "$XEX_URL" ]; then
+            echo "::error::El secreto XEX_DOWNLOAD_URL esta vacio o no existe."
+            exit 1
+          fi
           mkdir -p work_xex output_xex
           gdown "$XEX_URL" -O work_xex/xex.zip
           unzip -o work_xex/xex.zip -d work_xex/
           XEX_FILE=$(find work_xex -iname "default.xex" | head -n 1)
-          XEXP_FILE=$(find work_xex -iname "default.xexp" | head -n 1)
-          XEXTOOL_EXE=$(find work_xex -iname "xextool.exe" | head -n 1)
-          [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex || true
-          if [ -n "$XEXP_FILE" ] && [ -n "$XEXTOOL_EXE" ]; then
-            echo "Applying TU6 patch with bundled XexTool..."
-            WINEDEBUG=-all wine "$XEXTOOL_EXE" -e u -c u -o work_xex/default_patched.xex -p "$XEXP_FILE" work_xex/default.xex
-            mv work_xex/default_patched.xex work_xex/default.xex
+          if [ -z "$XEX_FILE" ]; then
+            echo "::error::No se encontro default.xex dentro del ZIP descargado."
+            exit 1
           fi
+          [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex
           cp work_xex/default.xex output_xex/default.xex
-                - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
+
+      - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
         run: |
           mkdir -p bin
           cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
@@ -86,17 +82,13 @@ jobs:
           cp build-xenonrecomp/XenonRecomp/XenonRecomp bin/XenonRecomp.exe
           cp build-xenonrecomp/XenonAnalyse/XenonAnalyse bin/XenonAnalyse.exe
           STATIC_LIBS=$(find build-xenonrecomp -name "*.a")
-          clang++ -O2 -std=c++20 \
-            -Ithird_party/XenonRecomp/XenonUtils \
-            -Ithird_party/XenonRecomp/third_party/disasm \
-            -Ithird_party/XenonRecomp/third_party/fmt/include \
-            tools/xexinfo/xexinfo.cpp -Wl,--start-group $STATIC_LIBS -Wl,--end-group -o bin/xexinfo.exe
+          clang++ -O2 -std=c++20 -Ithird_party/XenonRecomp/XenonUtils -Ithird_party/XenonRecomp/third_party/disasm -Ithird_party/XenonRecomp/third_party/fmt/include tools/xexinfo/xexinfo.cpp -Wl,--start-group $STATIC_LIBS -Wl,--end-group -o bin/xexinfo.exe
           chmod +x bin/*.exe
-          ./bin/xexinfo.exe work_xex/default.xex | tee xexinfo_out.txt || true
+          ./bin/xexinfo.exe work_xex/default.xex | tee xexinfo_out.txt
 
-      - name: Run port.py, sync TU6 entry point & apply POCO F6 + Fullscreen tweaks
+      - name: Run port.py, unlock 60 FPS & apply POCO F6 optimizations
         run: |
-          python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build || true
+          python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
           import os, re, subprocess
@@ -105,7 +97,7 @@ jobs:
           m_ep = re.search(r'[Ee]ntry\s*[Pp]oint\s*[:=]\s*0x([0-9A-Fa-f]{8})', info)
           if m_ep:
               ep_hex = m_ep.group(1).upper()
-              print("Detected TU6 Entry Point:", ep_hex)
+              print("Detected Entry Point:", ep_hex)
               for p in ("games/gears_of_war_3/gears_of_war_3.toml", "games/gears_of_war_3/game.cpp"):
                   if os.path.exists(p):
                       t = open(p, "r", encoding="utf-8", errors="ignore").read()
@@ -113,55 +105,39 @@ jobs:
                       t = re.sub(r'(sub_)[0-9A-Fa-f]{8}(\s*//\s*entry)', rf'\g<1>{ep_hex}\2', t)
                       open(p, "w", encoding="utf-8").write(t)
 
-          shared_path = "games/gears_of_war_3/ppc/ppc_recomp_shared.h"
-          shared = open(shared_path, "r", encoding="utf-8", errors="ignore").read() if os.path.exists(shared_path) else ""
-
-          all_addrs = sorted(set(int(m, 16) for m in re.findall(r'sub_(82[0-9A-Fa-f]{6})', shared)))
-          target = 0x8297D7B4
-          enclosing = max([a for a in all_addrs if a <= target], default=None)
-          if enclosing is not None:
-              real_sym = f"sub_{enclosing:08X}"
-              print(f"Resolved crash address 0x{target:08X} -> {real_sym}")
-              game_cpp = "games/gears_of_war_3/game.cpp"
-              if os.path.exists(game_cpp):
-                  gtxt = open(game_cpp, "r", encoding="utf-8", errors="ignore").read()
-                  gtxt = gtxt.replace("sub_8297D7B4", real_sym)
-                  open(game_cpp, "w", encoding="utf-8").write(gtxt)
-
-          imp_syms = set()
-          for root, _, files in os.walk("games/gears_of_war_3"):
-              if "ppc" in root.split(os.sep):
-                  continue
-              for fn in files:
-                  if fn.endswith(".h") or fn.endswith(".cpp"):
-                      txt = open(os.path.join(root, fn), "r", encoding="utf-8", errors="ignore").read()
-                      imp_syms.update(re.findall(r'__imp__sub_82[0-9A-Fa-f]{6}', txt))
-          missing_imps = sorted(s for s in imp_syms if f"void {s}(" not in shared and f"PPC_FUNC({s})" not in shared)
-          ppc0_path = "games/gears_of_war_3/ppc/ppc_recomp.0.cpp"
-          if os.path.exists(ppc0_path):
-              with open(ppc0_path, "a", encoding="utf-8") as f:
-                  f.write("\n// TU6 shifted __imp__ fallbacks\n")
-                  for s in missing_imps:
-                      f.write(f'extern "C" void {s}(PPCContext&, uint8_t*) {{}}\n')
-
           for root, _, files in os.walk("android"):
               for fn in files:
-                  if fn.endswith(".java") or fn.endswith(".kt"):
+                  if fn.endswith((".java", ".kt")):
                       jp = os.path.join(root, fn)
                       jt = open(jp, "r", encoding="utf-8", errors="ignore").read()
                       if "setContentView" in jt and "LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES" not in jt:
-                          jt = jt.replace(
-                              "setContentView(",
-                              "if (android.os.Build.VERSION.SDK_INT >= 28) { getWindow().getAttributes().layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES; } setContentView("
-                          )
+                          cutout = "if (android.os.Build.VERSION.SDK_INT >= 28) { window.attributes.layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }; setContentView(" if fn.endswith(".kt") else "if (android.os.Build.VERSION.SDK_INT >= 28) { getWindow().getAttributes().layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES; } setContentView("
+                          jt = jt.replace("setContentView(", cutout)
                           open(jp, "w", encoding="utf-8").write(jt)
-                          print("Enabled fullscreen cutout mode in:", jp)
 
-          subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
-          zst = open("empty.zst", "rb").read()
-          arr = ", ".join(f"0x{b:02x}" for b in zst)
-          with open("games/gears_of_war_3/data/shader/shader_cache.h", "w") as f:
-              f.write(f"""#pragma once
+          gcpp = "games/gears_of_war_3/game.cpp"
+          if os.path.exists(gcpp):
+              gt = open(gcpp, "r", encoding="utf-8", errors="ignore").read()
+              if "0x42700000" not in gt:
+                  gt = gt.replace(
+                      "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");",
+                      "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");\n    if (settings != 0) { PPC_STORE_U32(settings + 44, 0); PPC_STORE_U32(settings + 48, 0x42700000); }"
+                  )
+                  open(gcpp, "w", encoding="utf-8").write(gt)
+                  print("Unlocked 60 FPS cap in game.cpp")
+
+          if os.path.exists("CMakeLists.txt"):
+              cm = open("CMakeLists.txt", "r", encoding="utf-8", errors="ignore").read()
+              if "POCO_F6_OPT" not in cm:
+                  cm += '\n# POCO_F6_OPT\nif(ANDROID)\n  add_compile_options(-O2 -march=armv8.2-a+crypto+fp16+dotprod -mtune=cortex-a720)\nendif()\n'
+                  open("CMakeLists.txt", "w", encoding="utf-8").write(cm)
+
+          if not os.path.exists("games/gears_of_war_3/data/shader/shader_cache.h"):
+              subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
+              zst = open("empty.zst", "rb").read()
+              arr = ", ".join(f"0x{b:02x}" for b in zst)
+              with open("games/gears_of_war_3/data/shader/shader_cache.h", "w") as f:
+                  f.write(f"""#pragma once
           #include <cstdint>
           #include <cstddef>
           #include <array>
@@ -172,42 +148,38 @@ jobs:
               constexpr FilenameBuf(std::nullptr_t) {{}}
               constexpr FilenameBuf(const char*) {{}}
               operator char*() {{ return buf.data(); }}
-              operator const char*() const {{ return buf.data(); }}
           }};
-          inline std::string_view format_as(const FilenameBuf& f) {{ return f.buf.data(); }}
-          struct ShaderCacheEntry {{
-              uint64_t hash; uint32_t f1; uint32_t spirvOffset; uint32_t spirvSize;
-              uint32_t lateSpirvOffset; uint32_t lateSpirvSize; uint32_t usedTextureMask;
-              uint32_t f7; uint32_t f8; uint32_t specConstantsMask; uint32_t f10;
-              FilenameBuf filename; uint32_t f12;
-          }};
-          inline constexpr uint8_t g_compressedSpirvCache[] = {{ {arr} }};
-          inline constexpr size_t g_spirvCacheCompressedSize = {len(zst)};
-          inline constexpr size_t g_spirvCacheDecompressedSize = 0;
-          inline constexpr ShaderCacheEntry g_shaderCacheEntries[] = {{}};
-          inline constexpr size_t g_shaderCacheEntryCount = 0;
+          inline constexpr std::array<uint8_t, {len(zst)}> kShaderCacheZst = {{{arr}}};
           """)
           PYEOF
-          cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.cpp
+
+          if [ ! -f games/gears_of_war_3/data/shader/shader_cache.cpp ]; then
+            cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.cpp
           #include "shader_cache.h"
           EOF
+          fi
 
       - name: Build native Android libs & package APK
         env:
-          CMAKE_BUILD_PARALLEL_LEVEL: "4"
+          CMAKE_BUILD_PARALLEL_LEVEL: "2"
           NINJA_STATUS: "[%f/%t] "
         run: |
           export USERPROFILE="$HOME"
           mkdir -p "$HOME/.android"
           keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          chmod +x tools/*.sh
-          sed -i 's/pwd -W/pwd/g' tools/build-apk.sh
-          sed -i 's/\.bat//g' tools/build-apk.sh
-          sed -i 's/\.exe//g' tools/build-apk.sh
-          sed -i 's/windows-x86_64/linux-x86_64/g' tools/build-apk.sh
-          GAME_CPP="games/gears_of_war_3/game.cpp"
-          sed -i 's/sub_82CE4FF8/sub_82C24FF8/g; s/sub_82CE4C88/sub_825E4C88/g' "$GAME_CPP"
-          ./tools/build-apk.sh
+          chmod +x tools/*.sh || true
+          for script in tools/build-android.sh tools/build-apk.sh; do
+            if [ -f "$script" ]; then
+              sed -i 's/\r$//' "$script"
+              sed -i 's/pwd -W/pwd/g' "$script"
+              sed -i 's/\.bat//g' "$script"
+              sed -i 's/\.exe//g' "$script"
+              sed -i 's/windows-x86_64/linux-x86_64/g' "$script"
+              sed -i 's/gta4/gears_of_war_3/g' "$script"
+            fi
+          done
+          bash tools/build-android.sh
+          bash tools/build-apk.sh
 
       - name: Upload Gears 3 APK
         uses: actions/upload-artifact@v4
@@ -215,7 +187,6 @@ jobs:
           name: GearsOfWar3-POCO-F6-APK
           path: |
             **/*.apk
-            !**/build/**/intermediates/**
           if-no-files-found: error
 
       - name: Upload Decompressed default.xex
@@ -223,4 +194,5 @@ jobs:
         with:
           name: default-xex-decompressed
           path: output_xex/default.xex
+          if-no-files-found: warn
           
