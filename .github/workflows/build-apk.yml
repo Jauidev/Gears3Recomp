@@ -13,7 +13,6 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,7 +34,10 @@ jobs:
       - name: Create 'py' command wrapper & install build tools + Wine
         run: |
           sudo dpkg --add-architecture i386
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends -o Acquire::http::Timeout="15" -o Acquire::Retries="5" ninja-build clang lld unzip curl zstd wine wine32:i386
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+            -o Acquire::http::Timeout="15" \
+            -o Acquire::Retries="5" \
+            ninja-build clang lld unzip curl zstd wine wine32:i386
           pip install gdown capstone pefile
           echo '#!/usr/bin/env bash' | sudo tee /usr/local/bin/py
           echo 'if [ "$1" = "-3" ]; then shift; fi' | sudo tee -a /usr/local/bin/py
@@ -80,7 +82,10 @@ jobs:
       - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
         run: |
           mkdir -p bin
-          cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++
           cmake --build build-xenonrecomp -j $(nproc)
           cp build-xenonrecomp/XenonRecomp/XenonRecomp bin/XenonRecomp.exe
           cp build-xenonrecomp/XenonAnalyse/XenonAnalyse bin/XenonAnalyse.exe
@@ -114,7 +119,6 @@ jobs:
 
           shared_path = "games/gears_of_war_3/ppc/ppc_recomp_shared.h"
           shared = open(shared_path, "r", encoding="utf-8", errors="ignore").read() if os.path.exists(shared_path) else ""
-
           imp_syms = set()
           for root, _, files in os.walk("games/gears_of_war_3"):
               if "ppc" in root.split(os.sep):
@@ -189,6 +193,7 @@ jobs:
           inline constexpr size_t g_shaderCacheEntryCount = 0;
           """)
           PYEOF
+
           cat << 'EOF' > games/gears_of_war_3/data/shader/shader_cache.cpp
           #include "shader_cache.h"
           EOF
@@ -200,29 +205,16 @@ jobs:
         run: |
           export USERPROFILE="$HOME"
           mkdir -p "$HOME/.android"
-          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+            -storepass android -alias androiddebugkey -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
           chmod +x tools/*.sh
           sed -i 's/pwd -W/pwd/g' tools/build-apk.sh
           sed -i 's/\.bat//g' tools/build-apk.sh
           sed -i 's/\.exe//g' tools/build-apk.sh
           sed -i 's/windows-x86_64/linux-x86_64/g' tools/build-apk.sh
           sed -i 's/sub_82CE4FF8/sub_82C24FF8/g; s/sub_82CE4C88/sub_825E4C88/g' games/gears_of_war_3/game.cpp
-          sed -i 's/gta4/gears_of_war_3/g' tools/build-apk.sh
-          bash tools/build-apk.sh
 
-      - name: Upload Gears 3 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: GearsOfWar3-POCO-F6-APK
-          path: |
-            **/*.apk
-          if-no-files-found: error
-
-      - name: Upload Patched TU6 default.xex
-        uses: actions/upload-artifact@v4
-        with:
-          name: default-xex-TU6-patched
-          path: output_xex/default.xex
-          if-no-files-found: warn
 
         
