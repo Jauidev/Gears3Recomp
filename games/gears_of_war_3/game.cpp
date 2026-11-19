@@ -13,6 +13,22 @@
 
 uint32_t MmQueryAddressProtect(uint32_t address); // kernel/vmem.cpp
 
+extern "C" PPC_FUNC(__imp__sub_8297CFDC);
+
+// sub_8297CFDC: Evita crash signal 11 en 0x8297D7B4 cuando [r3 + 4] es nulo (0x00000000)
+PPC_FUNC(sub_8297CFDC)
+{
+    if (ctx.r3.u32 == 0 || PPC_LOAD_U32(ctx.r3.u32 + 4) == 0)
+    {
+        static std::atomic<int> s_logged{ 0 };
+        if (s_logged.fetch_add(1) < 4)
+            LOGF_WARNING("sub_8297CFDC: estructura con campo [r3+4] nulo omitida (r3=0x{:08X})", ctx.r3.u32);
+        ctx.r3.u64 = 0;
+        return;
+    }
+    __imp__sub_8297CFDC(ctx, base);
+}
+
 extern "C" PPC_FUNC(__imp__sub_8295A518);
 PPC_EXTERN_FUNC(sub_82CE4FF8); // XPhysicalFree(address)
 PPC_EXTERN_FUNC(sub_82CE4C88); // VirtualFree(address, size, type)
@@ -184,17 +200,17 @@ static void DropLoaderMapCheckpoints()
         const std::filesystem::path path = entry.path();
         if (!entry.is_regular_file(error) || path.extension() != ".sav")
             continue;
-        uint8_t header[19] = {};
+        uint8_t header = {};
         {
             std::ifstream file(path, std::ios::binary);
             file.read(reinterpret_cast<char*>(header), sizeof(header));
             if (file.gcount() != std::streamsize(sizeof(header)))
                 continue;
         }
-        const uint32_t version = uint32_t(header[0]) << 24 | header[1] << 16 | header[2] << 8 | header[3];
-        const uint32_t length = uint32_t(header[4]) << 24 | header[5] << 16 | header[6] << 8 | header[7];
+        const uint32_t version = uint32_t(header) << 24 | header << 16 | header << 8 | header;
+        const uint32_t length = uint32_t(header) << 24 | header << 16 | header << 8 | header;
         static const char kLoaderMap[] = "geargame_p";
-        bool loaderMap = version == 3 && length == sizeof(kLoaderMap) && header[18] == 0;
+        bool loaderMap = version == 3 && length == sizeof(kLoaderMap) && header == 0;
         for (size_t i = 0; loaderMap && i + 1 < sizeof(kLoaderMap); i++)
             loaderMap = std::tolower(header[8 + i]) == kLoaderMap[i];
         if (!loaderMap)
@@ -217,12 +233,8 @@ namespace game
 
     void RegisterExtraFunctions(Memory& memory)
     {
-        // Evita crash signal 11 en 0x8297D7B4 cuando el campo [r3 + 4] de la tabla de idiomas es nulo
-        memory.InsertFunction(0x8297D7B4, [](PPCContext& ctx, uint8_t* base)
-        {
-            (void)base;
-            ctx.r3.u64 = 0;
-        });
+        // Entry points the recompiler missed: memory.InsertFunction(address, function).
+        (void)memory;
     }
 
     const char* ThreadName(uint32_t startAddress, uint32_t startContext, uint32_t& entry)
@@ -250,3 +262,4 @@ namespace game
         return false;
     }
 }
+
