@@ -112,11 +112,13 @@ jobs:
                       imp_syms.update(re.findall(r'__imp__sub_82[0-9A-Fa-f]{6}', txt))
 
           missing_imps = sorted(s for s in imp_syms if f"void {s}(" not in shared and f"PPC_FUNC({s})" not in shared)
-          print("Generating linker definitions for TU6 shifted __imp__ symbols:", len(missing_imps))
-          with open("games/gears_of_war_3/ppc/tu6_missing_imps.cpp", "w", encoding="utf-8") as f:
-              f.write('#include "ppc_recomp_shared.h"\n')
-              for s in missing_imps:
-                  f.write(f'PPC_WEAK_FUNC({s}) {{}}\n')
+          print("Appending linker definitions for TU6 shifted __imp__ symbols to ppc_recomp.0.cpp:", len(missing_imps))
+          ppc0_path = "games/gears_of_war_3/ppc/ppc_recomp.0.cpp"
+          if os.path.exists(ppc0_path):
+              with open(ppc0_path, "a", encoding="utf-8") as f:
+                  f.write("\n// TU6 shifted __imp__ fallbacks\n")
+                  for s in missing_imps:
+                      f.write(f'extern "C" void {s}(PPCContext&, uint8_t*) {{}}\n')
 
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
           zst = open("empty.zst", "rb").read()
