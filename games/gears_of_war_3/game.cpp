@@ -13,21 +13,21 @@
 
 uint32_t MmQueryAddressProtect(uint32_t address); // kernel/vmem.cpp
 
-extern "C" PPC_FUNC(__imp__sub_8297D7B4);
+extern "C" PPC_FUNC(__imp__sub_829757B4);
 
-// sub_8297D7B4: Fix para crash signal 11 (fault address 0x100000000 / guest 0x00000000)
+// sub_829757B4: Fix para crash signal 11 (fault address 0x100000000 / guest 0x00000000)
 // Evita desreferenciar punteros nulos en registros clave antes de ejecutar la rutina.
-PPC_FUNC(sub_8297D7B4)
+PPC_FUNC(sub_829757B4)
 {
     if (ctx.r3.u32 == 0 || ctx.r4.u32 == 0)
     {
         static std::atomic<int> s_logged{ 0 };
         if (s_logged.fetch_add(1) < 4)
-            LOGF_WARNING("sub_8297D7B4: puntero nulo bloqueado (r3=0x{:08X}, r4=0x{:08X})", ctx.r3.u32, ctx.r4.u32);
+            LOGF_WARNING("sub_829757B4: puntero nulo bloqueado (r3=0x{:08X}, r4=0x{:08X})", ctx.r3.u32, ctx.r4.u32);
         ctx.r3.u64 = 0;
         return;
     }
-    __imp__sub_8297D7B4(ctx, base);
+    __imp__sub_829757B4(ctx, base);
 }
 
 extern "C" PPC_FUNC(__imp__sub_8295A518);
