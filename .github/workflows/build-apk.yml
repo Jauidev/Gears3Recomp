@@ -74,7 +74,7 @@ jobs:
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex
           cp work_xex/default.xex output_xex/default.xex
                 - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
-        run: |
+         run: |
           mkdir -p bin
           cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
           cmake --build build-xenonrecomp -j $(nproc)
