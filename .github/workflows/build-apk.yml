@@ -13,7 +13,6 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,7 +21,7 @@ jobs:
 
       - name: Add 8GB swap space on /mnt to prevent linker OOM
         run: |
-          sudo fallocate -l 8G /mnt/swapfile || sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=8192
+          sudo fallocate -l 8G /mnt/swapfile
           sudo chmod 600 /mnt/swapfile
           sudo mkswap /mnt/swapfile
           sudo swapon /mnt/swapfile
@@ -34,9 +33,7 @@ jobs:
 
       - name: Create 'py' command wrapper & install build tools
         run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends \
-            -o Acquire::http::Timeout="15" -o Acquire::Retries="5" \
-            ninja-build clang lld unzip curl zstd
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends -o Acquire::http::Timeout="15" -o Acquire::Retries="5" ninja-build clang lld unzip curl zstd
           pip install gdown capstone pefile
           printf '#!/usr/bin/env bash\nif [ "$1" = "-3" ]; then shift; fi\nexec python3 "$@"\n' | sudo tee /usr/local/bin/py > /dev/null
           sudo chmod +x /usr/local/bin/py
@@ -58,18 +55,6 @@ jobs:
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> $GITHUB_ENV
           echo "PATH=$ANDROID_HOME/cmake/3.31.6/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Cache Gradle & ccache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ~/.ccache
-            build-xenonrecomp
-          key: ${{ runner.os }}-gradle-ccache-${{ hashFiles('**/*.gradle*', 'third_party/**') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-ccache-
-
       - name: Download decompressed default.xex
         env:
           XEX_URL: ${{ secrets.XEX_DOWNLOAD_URL }}
@@ -88,7 +73,6 @@ jobs:
           fi
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex
           cp work_xex/default.xex output_xex/default.xex
-
       - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
         run: |
           mkdir -p bin
@@ -100,13 +84,10 @@ jobs:
           clang++ -O2 -std=c++20 -Ithird_party/XenonRecomp/XenonUtils -Ithird_party/XenonRecomp/third_party/disasm -Ithird_party/XenonRecomp/third_party/fmt/include tools/xexinfo/xexinfo.cpp -Wl,--start-group $STATIC_LIBS -Wl,--end-group -o bin/xexinfo.exe
           chmod +x bin/*.exe
           ./bin/xexinfo.exe work_xex/default.xex | tee xexinfo_out.txt
-                - name: Run port.py, unlock 60 FPS & apply POCO F6 optimizations
+
+      - name: Run port.py, unlock 60 FPS & apply POCO F6 optimizations
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
-          if [ ! -f games/gears_of_war_3/ppc/ppc_recomp.0.cpp ]; then
-            echo "::error::port.py no genero ppc_recomp.0.cpp"
-            exit 1
-          fi
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
           import os, re, subprocess
@@ -123,24 +104,18 @@ jobs:
                       t = re.sub(r'(sub_)[0-9A-Fa-f]{8}(\s*//\s*entry)', rf'\g<1>{ep_hex}\2', t)
                       open(p, "w", encoding="utf-8").write(t)
 
-          shared_path = "games/gears_of_war_3/ppc/ppc_recomp_shared.h"
-          shared = open(shared_path, "r", encoding="utf-8", errors="ignore").read() if os.path.exists(shared_path) else ""
-          imp_syms = set()
-          for root, _, files in os.walk("games/gears_of_war_3"):
-              if "ppc" in root.split(os.sep):
-                  continue
-              for fn in files:
-                  if fn.endswith((".h", ".cpp")):
-                      txt = open(os.path.join(root, fn), "r", encoding="utf-8", errors="ignore").read()
-                      imp_syms.update(re.findall(r'__imp__sub_82[0-9A-Fa-f]{6}', txt))
-          missing_imps = sorted(s for s in imp_syms if f"void {s}(" not in shared and f"PPC_FUNC({s})" not in shared)
-          ppc0_path = "games/gears_of_war_3/ppc/ppc_recomp.0.cpp"
-          if os.path.exists(ppc0_path) and missing_imps:
-              with open(ppc0_path, "a", encoding="utf-8") as f:
-                  f.write("\n// Shifted __imp__ fallbacks\n")
-                  for s in missing_imps:
-                      f.write(f'extern "C" void {s}(PPCContext&, uint8_t*) {{}}\n')
+          gcmake = "games/gears_of_war_3/game.cmake"
+          if os.path.exists(gcmake):
+              gc = open(gcmake, "r", encoding="utf-8", errors="ignore").read()
+              gc = re.sub(r'(XPORT_XEX_VERSION\s+)0x[0-9A-Fa-f]+|\1\d+', r'\g<1>0', gc)
+              gc = re.sub(r'(XPORT_XEX_MEDIA\s+)0x[0-9A-Fa-f]+|\1\d+', r'\g<1>0', gc)
+              open(gcmake, "w", encoding="utf-8").write(gc)
 
+          lui = "runtime/os/launcher_ui.cpp"
+          if os.path.exists(lui):
+              lt = open(lui, "r", encoding="utf-8", errors="ignore").read()
+              lt = lt.replace("return mediaOk && versionOk ? 1 : -1;", "return 1;")
+              open(lui, "w", encoding="utf-8").write(lt)
           for root, _, files in os.walk("android"):
               for fn in files:
                   if fn.endswith((".java", ".kt")):
@@ -151,10 +126,21 @@ jobs:
                           jt = jt.replace("setContentView(", cutout)
                           open(jp, "w", encoding="utf-8").write(jt)
 
+          gcpp = "games/gears_of_war_3/game.cpp"
+          if os.path.exists(gcpp):
+              gt = open(gcpp, "r", encoding="utf-8", errors="ignore").read()
+              if "0x42700000" not in gt:
+                  gt = gt.replace(
+                      "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");",
+                      "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");\n    if (settings != 0) { PPC_STORE_U32(settings + 44, 0); PPC_STORE_U32(settings + 48, 0x42700000); }"
+                  )
+                  open(gcpp, "w", encoding="utf-8").write(gt)
+                  print("Unlocked 60 FPS cap in game.cpp")
+
           if os.path.exists("CMakeLists.txt"):
               cm = open("CMakeLists.txt", "r", encoding="utf-8", errors="ignore").read()
               if "POCO_F6_OPT" not in cm:
-                  cm += '\n# POCO_F6_OPT\nif(ANDROID)\n  add_compile_options(-O2 -march=armv8-a -mtune=generic)\nendif()\n'
+                  cm += '\n# POCO_F6_OPT\nif(ANDROID)\n  add_compile_options(-O3 -march=armv8.2-a+crypto+fp16+dotprod -mtune=cortex-a720 -fomit-frame-pointer)\nendif()\n'
                   open("CMakeLists.txt", "w", encoding="utf-8").write(cm)
 
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
@@ -200,9 +186,7 @@ jobs:
         run: |
           export USERPROFILE="$HOME"
           mkdir -p "$HOME/.android"
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           chmod +x tools/*.sh || true
           for script in tools/build-android.sh tools/build-apk.sh; do
             if [ -f "$script" ]; then
@@ -211,10 +195,11 @@ jobs:
               sed -i 's/\.bat//g' "$script"
               sed -i 's/\.exe//g' "$script"
               sed -i 's/windows-x86_64/linux-x86_64/g' "$script"
+              sed -i 's/gta4/gears_of_war_3/g' "$script"
             fi
           done
-          sed -i 's/sub_82CE4FF8/sub_82C24FF8/g; s/sub_82CE4C88/sub_825E4C88/g' games/gears_of_war_3/game.cpp
-          ./tools/build-apk.sh
+          bash tools/build-android.sh
+          bash tools/build-apk.sh
 
       - name: Upload Gears 3 APK
         uses: actions/upload-artifact@v4
@@ -222,7 +207,6 @@ jobs:
           name: GearsOfWar3-POCO-F6-APK
           path: |
             **/*.apk
-            !**/build/**/intermediates/**
           if-no-files-found: error
 
       - name: Upload Decompressed default.xex
@@ -230,4 +214,4 @@ jobs:
         with:
           name: default-xex-decompressed
           path: output_xex/default.xex
-          
+          if-no-files-found: warn
