@@ -193,7 +193,7 @@ jobs:
           #include "shader_cache.h"
           EOF
 
-            - name: Build native Android libs & package APK
+      - name: Build native Android libs & package APK
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: "4"
           NINJA_STATUS: "[%f/%t] "
