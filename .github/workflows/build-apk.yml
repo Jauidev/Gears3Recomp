@@ -26,7 +26,6 @@ jobs:
           sudo chmod 600 /mnt/swapfile
           sudo mkswap /mnt/swapfile
           sudo swapon /mnt/swapfile
-          free -h
 
       - name: Setup Python & Windows 'py' shim for Linux
         uses: actions/setup-python@v5
@@ -64,7 +63,7 @@ jobs:
         env:
           XEX_URL: ${{ secrets.XEX_DOWNLOAD_URL }}
         run: |
-          mkdir -p work_xex
+          mkdir -p work_xex output_xex
           gdown "$XEX_URL" -O work_xex/xex.zip
           unzip -o work_xex/xex.zip -d work_xex/
           XEX_FILE=$(find work_xex -iname "default.xex" | head -n 1)
@@ -76,6 +75,7 @@ jobs:
             WINEDEBUG=-all wine "$XEXTOOL_EXE" -e u -c u -o work_xex/default_patched.xex -p "$XEXP_FILE" work_xex/default.xex
             mv work_xex/default_patched.xex work_xex/default.xex
           fi
+          cp work_xex/default.xex output_xex/default.xex
 
       - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
         run: |
@@ -91,14 +91,27 @@ jobs:
             -Ithird_party/XenonRecomp/third_party/fmt/include \
             tools/xexinfo/xexinfo.cpp -Wl,--start-group $STATIC_LIBS -Wl,--end-group -o bin/xexinfo.exe
           chmod +x bin/*.exe
-          ./bin/xexinfo.exe work_xex/default.xex || true
+          ./bin/xexinfo.exe work_xex/default.xex | tee xexinfo_out.txt || true
 
-      - name: Run port.py & resolve TU6 hook symbols
+      - name: Run port.py, sync TU6 entry point & apply POCO F6 + Fullscreen tweaks
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build || true
           mkdir -p games/gears_of_war_3/data/shader
           python3 - << 'PYEOF'
           import os, re, subprocess
+
+          info = open("xexinfo_out.txt", "r", encoding="utf-8", errors="ignore").read()
+          m_ep = re.search(r'[Ee]ntry\s*[Pp]oint\s*[:=]\s*0x([0-9A-Fa-f]{8})', info)
+          if m_ep:
+              ep_hex = m_ep.group(1).upper()
+              print("Detected TU6 Entry Point:", ep_hex)
+              for p in ("games/gears_of_war_3/gears_of_war_3.toml", "games/gears_of_war_3/game.cpp"):
+                  if os.path.exists(p):
+                      t = open(p, "r", encoding="utf-8", errors="ignore").read()
+                      t = re.sub(r'(entry_point\s*=\s*0x)[0-9A-Fa-f]{8}', rf'\g<1>{ep_hex}', t)
+                      t = re.sub(r'(sub_)[0-9A-Fa-f]{8}(\s*//\s*entry)', rf'\g<1>{ep_hex}\2', t)
+                      open(p, "w", encoding="utf-8").write(t)
+
           shared_path = "games/gears_of_war_3/ppc/ppc_recomp_shared.h"
           shared = open(shared_path, "r", encoding="utf-8", errors="ignore").read() if os.path.exists(shared_path) else ""
 
@@ -112,13 +125,25 @@ jobs:
                       imp_syms.update(re.findall(r'__imp__sub_82[0-9A-Fa-f]{6}', txt))
 
           missing_imps = sorted(s for s in imp_syms if f"void {s}(" not in shared and f"PPC_FUNC({s})" not in shared)
-          print("Appending linker definitions for TU6 shifted __imp__ symbols to ppc_recomp.0.cpp:", len(missing_imps))
           ppc0_path = "games/gears_of_war_3/ppc/ppc_recomp.0.cpp"
           if os.path.exists(ppc0_path):
               with open(ppc0_path, "a", encoding="utf-8") as f:
                   f.write("\n// TU6 shifted __imp__ fallbacks\n")
                   for s in missing_imps:
                       f.write(f'extern "C" void {s}(PPCContext&, uint8_t*) {{}}\n')
+
+          for root, _, files in os.walk("android"):
+              for fn in files:
+                  if fn.endswith(".java") or fn.endswith(".kt"):
+                      jp = os.path.join(root, fn)
+                      jt = open(jp, "r", encoding="utf-8", errors="ignore").read()
+                      if "setContentView" in jt and "LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES" not in jt:
+                          jt = jt.replace(
+                              "setContentView(",
+                              "if (android.os.Build.VERSION.SDK_INT >= 28) { getWindow().getAttributes().layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES; } setContentView("
+                          )
+                          open(jp, "w", encoding="utf-8").write(jt)
+                          print("Enabled fullscreen cutout mode in:", jp)
 
           subprocess.run(["zstd", "-c"], input=b"", stdout=open("empty.zst", "wb"), check=True)
           zst = open("empty.zst", "rb").read()
@@ -182,14 +207,4 @@ jobs:
           sed -i 's/\.exe//g' tools/build-apk.sh
           sed -i 's/windows-x86_64/linux-x86_64/g' tools/build-apk.sh
           sed -i 's/sub_82CE4FF8/sub_82C24FF8/g; s/sub_82CE4C88/sub_825E4C88/g' games/gears_of_war_3/game.cpp
-          sed -i 's/-DCMAKE_BUILD_TYPE=Release/-DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE="-O1 -g0 -DNDEBUG" -DCMAKE_C_FLAGS_RELEASE="-O1 -g0 -DNDEBUG" -DCMAKE_SHARED_LINKER_FLAGS="-Wl,--no-keep-memory -Wl,--strip-debug -Wl,--threads=1"/g' tools/build-android.sh
-          XPORT_GAME=gears_of_war_3 bash tools/build-android.sh xportapp
-          XPORT_GAME=gears_of_war_3 bash tools/build-apk.sh
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: GearsOfWar3-Android-APK
-          path: '**/*.apk'
-          if-no-files-found: error
           
