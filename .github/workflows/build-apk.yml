@@ -97,7 +97,7 @@ jobs:
           chmod +x bin/*.exe
           ./bin/xexinfo.exe work_xex/default.xex | tee xexinfo_out.txt
 
-      - name: Run port.py, allow XEX & apply POCO F6 + 60 FPS optimizations
+      - name: Run port.py, unlock 60 FPS & apply POCO F6 optimizations
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
           mkdir -p games/gears_of_war_3/data/shader
@@ -138,24 +138,16 @@ jobs:
                           jt = jt.replace("setContentView(", cutout)
                           open(jp, "w", encoding="utf-8").write(jt)
 
-          shared_path = "games/gears_of_war_3/ppc/ppc_recomp_shared.h"
-          shared = open(shared_path, "r", encoding="utf-8", errors="ignore").read() if os.path.exists(shared_path) else ""
-          imp_syms = set()
-          for root, _, files in os.walk("games/gears_of_war_3"):
-              if "ppc" in root.split(os.sep):
-                  continue
-              for fn in files:
-                  if fn.endswith((".h", ".cpp")):
-                      txt = open(os.path.join(root, fn), "r", encoding="utf-8", errors="ignore").read()
-                      imp_syms.update(re.findall(r'__imp__sub_82[0-9A-Fa-f]{6}', txt))
-
-          missing_imps = sorted(s for s in imp_syms if f"void {s}(" not in shared and f"PPC_FUNC({s})" not in shared)
-          ppc0_path = "games/gears_of_war_3/ppc/ppc_recomp.0.cpp"
-          if os.path.exists(ppc0_path):
-              with open(ppc0_path, "a", encoding="utf-8") as f:
-                  f.write("\n// Shifted __imp__ fallbacks\n")
-                  for s in missing_imps:
-                      f.write(f'extern "C" void {s}(PPCContext&, uint8_t*) {{}}\n')
+          gcpp = "games/gears_of_war_3/game.cpp"
+          if os.path.exists(gcpp):
+              gt = open(gcpp, "r", encoding="utf-8", errors="ignore").read()
+              if "MaxSmoothedFrameRate" not in gt:
+                  gt = gt.replace(
+                      "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");",
+                      "const bool noShadows = SwitchedOff(\"XPORT_SHADOWS\"), noEffects = SwitchedOff(\"XPORT_EFFECTS\");\n    if (settings != 0) { PPC_STORE_U32(settings + 44, 0); PPC_STORE_F32(settings + 48, 60.0f); }"
+                  )
+                  open(gcpp, "w", encoding="utf-8").write(gt)
+                  print("Unlocked 60 FPS cap in game.cpp")
 
           if os.path.exists("CMakeLists.txt"):
               cm = open("CMakeLists.txt", "r", encoding="utf-8", errors="ignore").read()
@@ -218,7 +210,6 @@ jobs:
               sed -i 's/gta4/gears_of_war_3/g' "$script"
             fi
           done
-          sed -i 's/sub_82CE4FF8/sub_82C24FF8/g; s/sub_82CE4C88/sub_825E4C88/g' games/gears_of_war_3/game.cpp
           bash tools/build-android.sh
           bash tools/build-apk.sh
 
