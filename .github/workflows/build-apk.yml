@@ -204,4 +204,26 @@ jobs:
           mkdir -p "$HOME/.android"
           keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           chmod +x tools/*.sh android/gradlew || true
-          sed -i 's/\r$//' tools/build-apk.sh
+                    sed -i 's/pwd -W/pwd/g' tools/build-apk.sh
+          sed -i 's/\.bat//g' tools/build-apk.sh
+          sed -i 's/\.exe//g' tools/build-apk.sh
+          sed -i 's/windows-x86_64/linux-x86_64/g' tools/build-apk.sh
+          sed -i 's/sub_82CE4FF8/sub_82C24FF8/g; s/sub_82CE4C88/sub_825E4C88/g' games/gears_of_war_3/game.cpp
+          sed -i 's/gta4/gears_of_war_3/g' tools/build-apk.sh
+          bash tools/build-apk.sh
+
+      - name: Upload Gears 3 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GearsOfWar3-POCO-F6-APK
+          path: |
+            **/*.apk
+          if-no-files-found: error
+
+      - name: Upload Patched TU6 default.xex
+        uses: actions/upload-artifact@v4
+        with:
+          name: default-xex-TU6-patched
+          path: output_xex/default.xex
+          if-no-files-found: warn
+
