@@ -78,7 +78,7 @@ jobs:
             mv work_xex/default_patched.xex work_xex/default.xex
           fi
           cp work_xex/default.xex output_xex/default.xex
-      - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
+                - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
         run: |
           mkdir -p bin
           cmake -S third_party/XenonRecomp -B build-xenonrecomp -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
@@ -116,7 +116,6 @@ jobs:
           shared_path = "games/gears_of_war_3/ppc/ppc_recomp_shared.h"
           shared = open(shared_path, "r", encoding="utf-8", errors="ignore").read() if os.path.exists(shared_path) else ""
 
-          # Localiza automaticamente la funcion exacta que contiene o precede a 0x8297D7B4
           all_addrs = sorted(set(int(m, 16) for m in re.findall(r'sub_(82[0-9A-Fa-f]{6})', shared)))
           target = 0x8297D7B4
           enclosing = max([a for a in all_addrs if a <= target], default=None)
@@ -206,7 +205,8 @@ jobs:
           sed -i 's/\.bat//g' tools/build-apk.sh
           sed -i 's/\.exe//g' tools/build-apk.sh
           sed -i 's/windows-x86_64/linux-x86_64/g' tools/build-apk.sh
-          sed -i 's/sub_82CE4FF8/sub_82C24FF8/g; s/sub_82CE4C88/sub_825E4C88/g' games/gears_of_war_3/game.cpp
+          GAME_CPP="games/gears_of_war_3/game.cpp"
+          sed -i 's/sub_82CE4FF8/sub_82C24FF8/g; s/sub_82CE4C88/sub_825E4C88/g' "$GAME_CPP"
           ./tools/build-apk.sh
 
       - name: Upload Gears 3 APK
