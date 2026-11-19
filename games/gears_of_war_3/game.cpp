@@ -13,20 +13,20 @@
 
 uint32_t MmQueryAddressProtect(uint32_t address); // kernel/vmem.cpp
 
-extern "C" PPC_FUNC(__imp__sub_8297CFDC);
+extern "C" PPC_FUNC(__imp__sub_82F7CFDC);
 
-// sub_8297CFDC: Evita crash signal 11 en 0x8297D7B4 cuando [r3 + 4] es nulo (0x00000000)
-PPC_FUNC(sub_8297CFDC)
+// sub_82F7CFDC: Evita crash signal 11 cuando [r3 + 4] es nulo (0x00000000)
+PPC_FUNC(sub_82F7CFDC)
 {
     if (ctx.r3.u32 == 0 || PPC_LOAD_U32(ctx.r3.u32 + 4) == 0)
     {
         static std::atomic<int> s_logged{ 0 };
         if (s_logged.fetch_add(1) < 4)
-            LOGF_WARNING("sub_8297CFDC: estructura con campo [r3+4] nulo omitida (r3=0x{:08X})", ctx.r3.u32);
+            LOGF_WARNING("sub_82F7CFDC: estructura con campo [r3+4] nulo omitida (r3=0x{:08X})", ctx.r3.u32);
         ctx.r3.u64 = 0;
         return;
     }
-    __imp__sub_8297CFDC(ctx, base);
+    __imp__sub_82F7CFDC(ctx, base);
 }
 
 extern "C" PPC_FUNC(__imp__sub_8295A518);
@@ -105,7 +105,6 @@ PPC_FUNC(sub_8253A428)
         PPC_STORE_U32(error + 4, 0);
     }
 }
-
 extern "C" PPC_FUNC(__imp__sub_824105B0);
 
 namespace
