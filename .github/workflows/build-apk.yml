@@ -56,7 +56,7 @@ jobs:
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> $GITHUB_ENV
           echo "PATH=$ANDROID_HOME/cmake/3.31.6/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Download default.xex + default.xexp and apply TU6 patch
+      - name: Download default.xex and decompress with XexTool
         env:
           XEX_URL: ${{ secrets.XEX_DOWNLOAD_URL }}
         run: |
@@ -75,13 +75,16 @@ jobs:
             exit 1
           fi
           [ "$XEX_FILE" != "work_xex/default.xex" ] && cp "$XEX_FILE" work_xex/default.xex
-          if [ -n "$XEXP_FILE" ] && [ -n "$XEXTOOL_EXE" ]; then
-            echo "Applying TU6 patch with bundled XexTool..."
-            WINEDEBUG=-all wine "$XEXTOOL_EXE" -e u -c u -o work_xex/default_patched.xex -p "$XEXP_FILE" work_xex/default.xex
+          if [ -n "$XEXTOOL_EXE" ]; then
+            echo "Decrypting/decompressing default.xex with XexTool..."
+            if [ -n "$XEXP_FILE" ]; then
+              WINEDEBUG=-all wine "$XEXTOOL_EXE" -e u -c u -o work_xex/default_patched.xex -p "$XEXP_FILE" work_xex/default.xex
+            else
+              WINEDEBUG=-all wine "$XEXTOOL_EXE" -e u -c u -o work_xex/default_patched.xex work_xex/default.xex
+            fi
             mv work_xex/default_patched.xex work_xex/default.xex
           fi
           cp work_xex/default.xex output_xex/default.xex
-
       - name: Build host tools (XenonRecomp, XenonAnalyse, xexinfo) into bin/*.exe
         run: |
           mkdir -p bin
@@ -94,7 +97,7 @@ jobs:
           chmod +x bin/*.exe
           ./bin/xexinfo.exe work_xex/default.xex | tee xexinfo_out.txt
 
-      - name: Run port.py, allow TU6 XEX & apply POCO F6 optimizations
+      - name: Run port.py, allow XEX & apply POCO F6 + 60 FPS optimizations
         run: |
           python3 tools/port.py work_xex/default.xex work_port gears_of_war_3 --no-build
           mkdir -p games/gears_of_war_3/data/shader
@@ -105,28 +108,26 @@ jobs:
           m_ep = re.search(r'[Ee]ntry\s*[Pp]oint\s*[:=]\s*0x([0-9A-Fa-f]{8})', info)
           if m_ep:
               ep_hex = m_ep.group(1).upper()
-              print("Detected TU6 Entry Point:", ep_hex)
+              print("Detected Entry Point:", ep_hex)
               for p in ("games/gears_of_war_3/gears_of_war_3.toml", "games/gears_of_war_3/game.cpp"):
                   if os.path.exists(p):
                       t = open(p, "r", encoding="utf-8", errors="ignore").read()
                       t = re.sub(r'(entry_point\s*=\s*0x)[0-9A-Fa-f]{8}', rf'\g<1>{ep_hex}', t)
                       t = re.sub(r'(sub_)[0-9A-Fa-f]{8}(\s*//\s*entry)', rf'\g<1>{ep_hex}\2', t)
                       open(p, "w", encoding="utf-8").write(t)
+
           gcmake = "games/gears_of_war_3/game.cmake"
           if os.path.exists(gcmake):
               gc = open(gcmake, "r", encoding="utf-8", errors="ignore").read()
               gc = re.sub(r'(XPORT_XEX_VERSION\s+)0x[0-9A-Fa-f]+|\1\d+', r'\g<1>0', gc)
               gc = re.sub(r'(XPORT_XEX_MEDIA\s+)0x[0-9A-Fa-f]+|\1\d+', r'\g<1>0', gc)
               open(gcmake, "w", encoding="utf-8").write(gc)
-              print("Set XPORT_XEX_VERSION=0 and XPORT_XEX_MEDIA=0 in game.cmake")
 
           lui = "runtime/os/launcher_ui.cpp"
           if os.path.exists(lui):
               lt = open(lui, "r", encoding="utf-8", errors="ignore").read()
               lt = lt.replace("return mediaOk && versionOk ? 1 : -1;", "return 1;")
               open(lui, "w", encoding="utf-8").write(lt)
-              print("Patched XexHeadGame in launcher_ui.cpp to accept TU6")
-
           for root, _, files in os.walk("android"):
               for fn in files:
                   if fn.endswith((".java", ".kt")):
@@ -152,7 +153,7 @@ jobs:
           ppc0_path = "games/gears_of_war_3/ppc/ppc_recomp.0.cpp"
           if os.path.exists(ppc0_path):
               with open(ppc0_path, "a", encoding="utf-8") as f:
-                  f.write("\n// TU6 shifted __imp__ fallbacks\n")
+                  f.write("\n// Shifted __imp__ fallbacks\n")
                   for s in missing_imps:
                       f.write(f'extern "C" void {s}(PPCContext&, uint8_t*) {{}}\n')
 
@@ -229,9 +230,9 @@ jobs:
             **/*.apk
           if-no-files-found: error
 
-      - name: Upload Patched TU6 default.xex
+      - name: Upload Decompressed default.xex
         uses: actions/upload-artifact@v4
         with:
-          name: default-xex-TU6-patched
+          name: default-xex-decompressed
           path: output_xex/default.xex
           if-no-files-found: warn
