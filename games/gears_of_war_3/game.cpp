@@ -13,6 +13,22 @@
 
 uint32_t MmQueryAddressProtect(uint32_t address); // kernel/vmem.cpp
 
+extern "C" PPC_FUNC(__imp__sub_829815C8);
+
+// sub_829815C8: Evita crash signal 11 cuando [r3 + 4] es nulo (0x00000000)
+PPC_FUNC(sub_829815C8)
+{
+    if (ctx.r3.u32 == 0 || PPC_LOAD_U32(ctx.r3.u32 + 4) == 0)
+    {
+        static std::atomic<int> s_logged{ 0 };
+        if (s_logged.fetch_add(1) < 4)
+            LOGF_WARNING("sub_829815C8: estructura nula omitida (r3=0x{:08X})", ctx.r3.u32);
+        ctx.r3.u64 = 0;
+        return;
+    }
+    __imp__sub_829815C8(ctx, base);
+}
+
 extern "C" PPC_FUNC(__imp__sub_8295A518);
 PPC_EXTERN_FUNC(sub_82CE4FF8); // XPhysicalFree(address)
 PPC_EXTERN_FUNC(sub_82CE4C88); // VirtualFree(address, size, type)
@@ -89,7 +105,6 @@ PPC_FUNC(sub_8253A428)
         PPC_STORE_U32(error + 4, 0);
     }
 }
-
 extern "C" PPC_FUNC(__imp__sub_824105B0);
 
 namespace
@@ -185,19 +200,20 @@ static void DropLoaderMapCheckpoints()
         const std::filesystem::path path = entry.path();
         if (!entry.is_regular_file(error) || path.extension() != ".sav")
             continue;
-        uint8_t header[19] = {};
+        std::string header(19, '\0');
         {
             std::ifstream file(path, std::ios::binary);
-            file.read(reinterpret_cast<char*>(header), sizeof(header));
-            if (file.gcount() != std::streamsize(sizeof(header)))
+            file.read(header.data(), header.size());
+            if (file.gcount() != std::streamsize(header.size()))
                 continue;
         }
-        const uint32_t version = uint32_t(header[0]) << 24 | header[1] << 16 | header[2] << 8 | header[3];
-        const uint32_t length = uint32_t(header[4]) << 24 | header[5] << 16 | header[6] << 8 | header[7];
+        const auto u8 = [&](size_t idx) -> uint32_t { return static_cast<uint8_t>(header.at(idx)); };
+        const uint32_t version = (u8(0) << 24) | (u8(1) << 16) | (u8(2) << 8) | u8(3);
+        const uint32_t length = (u8(4) << 24) | (u8(5) << 16) | (u8(6) << 8) | u8(7);
         static const char kLoaderMap[] = "geargame_p";
-        bool loaderMap = version == 3 && length == sizeof(kLoaderMap) && header[18] == 0;
+        bool loaderMap = version == 3 && length == sizeof(kLoaderMap) && u8(18) == 0;
         for (size_t i = 0; loaderMap && i + 1 < sizeof(kLoaderMap); i++)
-            loaderMap = std::tolower(header[8 + i]) == kLoaderMap[i];
+            loaderMap = std::tolower(u8(8 + i)) == kLoaderMap[i];
         if (!loaderMap)
             continue;
         const std::filesystem::path copy =
