@@ -30,6 +30,16 @@ disco a un APK. Sigue a [GearsRecomp](https://github.com/Jauidev/GearsRecomp), e
 
 En Adreno, el launcher puede usar Mesa Turnip si el driver del sistema no sirve.
 
+### Partidas y perfil
+
+Todo queda en `/sdcard/Android/data/com.xport.gears_of_war_3/files/save`:
+
+- `profile.bin`: las opciones del perfil (brillo, controles...). Entra en las copias de seguridad del launcher.
+- `PlayerStorage.dat/PlayerStorage.dat`: los datos del jugador (progreso, desbloqueos). Va firmado con el perfil
+  que lo creó, así que uno de una consola u otro perfil no se carga tal cual. Para traerlo, sácalo de su paquete
+  (CON) y cópialo como `save/PlayerStorage.import.dat`: al abrir el juego se firma para este perfil y se
+  instala. El que había se guarda como `save/PlayerStorage.previous.dat`.
+
 ## Compilar
 
 Requisitos (Windows): Android NDK 27.2, Android SDK (build-tools 36, CMake 3.31), MSVC Build Tools 2022,

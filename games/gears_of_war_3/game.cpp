@@ -4,6 +4,7 @@
 #include <game.h>
 #include <kernel/function.h>
 #include <kernel/memory.h>
+#include <kernel/xam.h>
 #include <os/logger.h>
 #include <os/paths.h>
 #include <cctype>
@@ -209,6 +210,87 @@ static void DropLoaderMapCheckpoints()
     }
 }
 
+void XeCryptSha(const uint8_t* input1, uint32_t size1, const uint8_t* input2, uint32_t size2,
+    const uint8_t* input3, uint32_t size3, uint8_t* digest, uint32_t digestSize); // kernel/xecrypt.cpp
+
+// PlayerStorage.dat, the "Player Data" save (savedrive0, content PlayerStorage.dat: the folder
+// save/PlayerStorage.dat/), starts with SHA-1(profile XUID, big-endian, then the rest of the file);
+// the XUID appears nowhere else in it (worked out from the file attached to issue #7). A copy made
+// by another profile or a console does not match the port's XUID, so the game takes it as damaged
+// and starts over. A file put at save/PlayerStorage.import.dat (extracted from its STFS package)
+// is signed again with the port's XUID and installed; the one it replaces is kept as
+// save/PlayerStorage.previous.dat. Only files asked for are re-signed: the game's own file always
+// has the port's XUID, and re-signing one cut short by a crash would hand the game a truncated file.
+static void ImportPlayerStorage()
+{
+    namespace fs = std::filesystem;
+    constexpr size_t kHashSize = 20;
+    constexpr uintmax_t kMaxSize = 1024 * 1024; // the game's own file is about 6 KB
+
+    std::error_code error;
+    const fs::path save = os::paths::GetSavePath();
+    const fs::path import = save / "PlayerStorage.import.dat";
+    if (!fs::is_regular_file(import, error))
+        return;
+
+    const uintmax_t size = fs::file_size(import, error);
+    std::vector<uint8_t> data;
+    if (!error && size > kHashSize && size <= kMaxSize)
+    {
+        data.resize(size_t(size));
+        std::ifstream file(import, std::ios::binary);
+        if (!file.read(reinterpret_cast<char*>(data.data()), std::streamsize(data.size())))
+            data.clear();
+    }
+    if (data.empty())
+    {
+        LOGF_WARNING("PlayerStorage.import.dat: {} bytes, not a PlayerStorage.dat; not imported", size);
+        return;
+    }
+    // The whole package (as copied off the console) instead of the file inside it.
+    if (memcmp(data.data(), "CON ", 4) == 0 || memcmp(data.data(), "LIVE", 4) == 0 || memcmp(data.data(), "PIRS", 4) == 0)
+    {
+        LOG_WARNING("PlayerStorage.import.dat is an STFS package: extract PlayerStorage.dat from it first; not imported");
+        return;
+    }
+
+    uint8_t xuid[8];
+    for (int i = 0; i < 8; i++)
+        xuid[i] = uint8_t(XAM_PROFILE_XUID >> (56 - i * 8));
+    uint8_t hash[kHashSize];
+    XeCryptSha(xuid, sizeof(xuid), data.data() + kHashSize, uint32_t(data.size() - kHashSize), nullptr, 0, hash, sizeof(hash));
+    const bool resigned = memcmp(hash, data.data(), kHashSize) != 0;
+    memcpy(data.data(), hash, kHashSize);
+
+    // The game's file inside the content folder: the one already there, else its usual name.
+    const fs::path folder = save / "PlayerStorage.dat";
+    fs::path target = folder / "PlayerStorage.dat";
+    int files = 0;
+    for (const auto& entry : fs::directory_iterator(folder, error))
+    {
+        if (entry.is_regular_file(error) && ++files == 1)
+            target = entry.path();
+    }
+    if (files > 1)
+        target = folder / "PlayerStorage.dat";
+
+    fs::create_directories(folder, error);
+    if (fs::exists(target, error))
+        fs::copy_file(target, save / "PlayerStorage.previous.dat", fs::copy_options::overwrite_existing, error);
+    {
+        std::ofstream file(target, std::ios::binary | std::ios::trunc);
+        file.write(reinterpret_cast<const char*>(data.data()), std::streamsize(data.size()));
+        if (!file)
+        {
+            LOGF_WARNING("PlayerStorage.import.dat: cannot write {}", target.string());
+            return;
+        }
+    }
+    fs::remove(import, error);
+    LOGF_WARNING("PlayerStorage.import.dat installed as {} ({} bytes, {})", target.string(), data.size(),
+                 resigned ? "signed again with this profile's XUID" : "already this profile's");
+}
+
 namespace game
 {
     const char* Title()
@@ -235,6 +317,7 @@ namespace game
     void AfterImageLoad()
     {
         DropLoaderMapCheckpoints();
+        ImportPlayerStorage();
     }
 
     const char* RendererOptions()
