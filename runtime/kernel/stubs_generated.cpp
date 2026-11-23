@@ -339,20 +339,6 @@ static uint32_t Unimplemented__snprintf()
 }
 GUEST_FUNCTION_HOOK(__imp___snprintf, Unimplemented__snprintf);
 
-static uint32_t Unimplemented_XeKeysConsoleSignatureVerification()
-{
-    LOG_UTILITY("not implemented");
-    return 0;
-}
-GUEST_FUNCTION_HOOK(__imp__XeKeysConsoleSignatureVerification, Unimplemented_XeKeysConsoleSignatureVerification);
-
-static uint32_t Unimplemented_XeKeysConsolePrivateKeySign()
-{
-    LOG_UTILITY("not implemented");
-    return 0;
-}
-GUEST_FUNCTION_HOOK(__imp__XeKeysConsolePrivateKeySign, Unimplemented_XeKeysConsolePrivateKeySign);
-
 static uint32_t Unimplemented_IoDismountVolume()
 {
     LOG_UTILITY("not implemented");
@@ -409,13 +395,6 @@ static uint32_t Unimplemented_NtYieldExecution()
 }
 GUEST_FUNCTION_HOOK(__imp__NtYieldExecution, Unimplemented_NtYieldExecution);
 
-static uint32_t Unimplemented_XamUserGetDeviceContext()
-{
-    LOG_UTILITY("not implemented");
-    return 0;
-}
-GUEST_FUNCTION_HOOK(__imp__XamUserGetDeviceContext, Unimplemented_XamUserGetDeviceContext);
-
 static uint32_t Unimplemented_XamVoiceIsActiveProcess()
 {
     LOG_UTILITY("not implemented");
@@ -471,13 +450,6 @@ static uint32_t Unimplemented_NetDll_XNetSetSystemLinkPort()
     return 0;
 }
 GUEST_FUNCTION_HOOK(__imp__NetDll_XNetSetSystemLinkPort, Unimplemented_NetDll_XNetSetSystemLinkPort);
-
-static uint32_t Unimplemented_XamContentGetLicenseMask()
-{
-    LOG_UTILITY("not implemented");
-    return 0;
-}
-GUEST_FUNCTION_HOOK(__imp__XamContentGetLicenseMask, Unimplemented_XamContentGetLicenseMask);
 
 static uint32_t Unimplemented_XamShowQuickChatUI()
 {

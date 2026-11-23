@@ -5,6 +5,10 @@
 #define MSG_AREA(msgid)     (((msgid) >> 16) & 0xFFFF)
 #define MSG_NUMBER(msgid)   ((msgid) & 0xFFFF)
 
+// the XUID of the one local profile (user 0). Gears of War 3 hashes it into PlayerStorage.dat
+// (games/gears_of_war_3/game.cpp), so changing it invalidates the saves already made.
+constexpr uint64_t XAM_PROFILE_XUID = 0xB13EBABEBABEBABE;
+
 XCONTENT_DATA XamMakeContent(uint32_t type, const std::string_view& name);
 void XamRegisterContent(const XCONTENT_DATA& data, const std::string_view& root);
 // registers the saves already in the save folder, so the game's save enumeration lists

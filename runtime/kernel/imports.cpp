@@ -341,7 +341,7 @@ uint32_t XMsgStartIORequest(uint32_t App, uint32_t Message, XXOVERLAPPED* lpOver
 }
 
 // one local profile, user 0 (Unleashed reported all four users as signed in).
-constexpr uint64_t PROFILE_XUID = 0xB13EBABEBABEBABE;
+constexpr uint64_t PROFILE_XUID = XAM_PROFILE_XUID;
 constexpr const char* PROFILE_NAME = "Player";
 
 uint32_t XamUserGetSigninState(uint32_t userIndex)
@@ -391,6 +391,36 @@ uint32_t XamContentGetCreator(uint32_t userIndex, const XCONTENT_DATA* contentDa
 
     if (overlapped)
         return CompleteOverlapped(overlapped, 0, 0);
+    return 0;
+}
+
+// XamContentGetLicenseMask(mask*, overlapped): the game calls it at boot. The generated stub returned
+// success without writing the mask, so the title read whatever was on its stack. A disc game owns
+// everything: all licenses, as XamContentCreateEx reports.
+uint32_t XamContentGetLicenseMask(be<uint32_t>* mask, XXOVERLAPPED* overlapped)
+{
+    constexpr uint32_t ERROR_INVALID_PARAMETER_X = 87;
+    const uint32_t result = mask ? 0 : ERROR_INVALID_PARAMETER_X;
+    if (mask)
+        *mask = 0xFFFFFFFF;
+
+    if (overlapped)
+        return CompleteOverlapped(overlapped, result, 0);
+    return result;
+}
+
+// XamUserGetDeviceContext(userIndex, deviceClass, context*), as Xenia: the context of the signed-in
+// user's pad is its index. The stub left *context unwritten (called at boot).
+uint32_t XamUserGetDeviceContext(uint32_t userIndex, uint32_t deviceClass, be<uint32_t>* context)
+{
+    constexpr uint32_t XUSER_INDEX_ANY_X = 0xFF;
+    constexpr uint32_t X_E_DEVICE_NOT_CONNECTED = 0x8007048F;
+    if (context)
+        *context = 0;
+    if (userIndex != 0 && (userIndex & XUSER_INDEX_ANY_X) != XUSER_INDEX_ANY_X)
+        return X_E_DEVICE_NOT_CONNECTED;
+    if (context)
+        *context = userIndex;
     return 0;
 }
 
@@ -1979,6 +2009,8 @@ GUEST_FUNCTION_HOOK(__imp__XamContentDelete, XamContentDelete);
 GUEST_FUNCTION_HOOK(__imp__XamContentClose, XamContentClose);
 GUEST_FUNCTION_HOOK(__imp__XamContentSetThumbnail, XamContentSetThumbnail);
 GUEST_FUNCTION_HOOK(__imp__XamContentGetCreator, XamContentGetCreator);
+GUEST_FUNCTION_HOOK(__imp__XamContentGetLicenseMask, XamContentGetLicenseMask);
+GUEST_FUNCTION_HOOK(__imp__XamUserGetDeviceContext, XamUserGetDeviceContext);
 GUEST_FUNCTION_HOOK(__imp__XamContentCreateEnumerator, XamContentCreateEnumerator);
 GUEST_FUNCTION_HOOK(__imp__XamContentGetDeviceState, XamContentGetDeviceState);
 GUEST_FUNCTION_HOOK(__imp__XamContentGetDeviceData, XamContentGetDeviceData);

@@ -3,6 +3,7 @@
 // Xenia's XECRYPT_SHA_STATE: a byte count, the five chaining words, a 64-byte block buffer.
 #include <stdafx.h>
 #include <kernel/function.h>
+#include <kernel/xdm.h>
 
 namespace
 {
@@ -165,6 +166,41 @@ void XeCryptSha(const uint8_t* input1, uint32_t size1, const uint8_t* input2, ui
     sha.Final(full);
     memcpy(digest, full, std::min<uint32_t>(digestSize, 20));
 }
+
+// Console-key signatures. In Gears of War 3 only the XDK's utility-drive code uses them
+// (sub_82CE7830 signs and sub_82CE77B0 checks the header it keeps on \Device\Harddisk0\partition0,
+// for cache:), which this runtime does not run: cache: is a host folder (kernel/io/nt_file.cpp).
+// PlayerStorage.dat is not signed with them (its header is a SHA-1 with the profile XUID,
+// games/gears_of_war_3/game.cpp). The generated stubs returned FALSE, which reads as a bad signature;
+// there is no console key, so every signature made here is accepted.
+
+// XeKeysConsolePrivateKeySign(hash, XE_CONSOLE_CERTIFICATE*): a certificate like Xenia's
+// (retail console, no key), and TRUE.
+uint32_t XeKeysConsolePrivateKeySign(const uint8_t* hash, uint8_t* certificate)
+{
+    if (hash == nullptr || certificate == nullptr)
+        return FALSE;
+
+    constexpr uint32_t CERTIFICATE_SIZE = 0x1A8;
+    memset(certificate, 0, CERTIFICATE_SIZE);
+    reinterpret_cast<be<uint16_t>*>(certificate)[0] = uint16_t(CERTIFICATE_SIZE); // cert_size
+    *reinterpret_cast<be<uint32_t>*>(certificate + 0x18) = 2u;                    // console_type: retail
+    LOG_UTILITY("signed (no console key)");
+    return TRUE;
+}
+
+// XeKeysConsoleSignatureVerification(hash, XE_CONSOLE_SIGNATURE*, BOOL* valid): sub_82CE77B0 takes
+// the signature as good only when both the result and *valid are nonzero.
+uint32_t XeKeysConsoleSignatureVerification(const uint8_t* hash, const uint8_t* signature, be<uint32_t>* valid)
+{
+    if (valid)
+        *valid = TRUE;
+    LOG_UTILITY("accepted (no console key)");
+    return TRUE;
+}
+
+GUEST_FUNCTION_HOOK(__imp__XeKeysConsolePrivateKeySign, XeKeysConsolePrivateKeySign);
+GUEST_FUNCTION_HOOK(__imp__XeKeysConsoleSignatureVerification, XeKeysConsoleSignatureVerification);
 
 GUEST_FUNCTION_HOOK(__imp__XeCryptShaInit, XeCryptShaInit);
 GUEST_FUNCTION_HOOK(__imp__XeCryptShaUpdate, XeCryptShaUpdate);
