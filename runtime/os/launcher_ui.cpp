@@ -736,6 +736,14 @@ namespace
             }
             ++copied;
         }
+        // The profile's options (brightness, controls...: runtime/kernel/xam_profile.cpp) go with the
+        // saves; restoring copies every file of the backup back into save/.
+        const fs::path profile = SaveDir() / "profile.bin";
+        if (copied && fs::exists(profile, ec))
+        {
+            fs::copy_file(profile, target / profile.filename(), fs::copy_options::overwrite_existing, ec);
+            ok = ok && !ec;
+        }
         if (copied && !ok)
         {
             fs::remove_all(target, ec);
