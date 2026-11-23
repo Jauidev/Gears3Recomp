@@ -7,7 +7,7 @@ set(XPORT_XEX_VERSION 0x00000009)
 set(XPORT_APP_LABEL "Gears of War 3")
 # The version the phone and the launcher show (tools/build-apk.sh: the manifest's versionName; its
 # versionCode stays, so the APK still installs over the one on the phone without losing its data).
-set(XPORT_APP_VERSION "1.1.0")
+set(XPORT_APP_VERSION "1.1.1")
 # The launcher's colours (0xRRGGBB) to go with its own background, LAUNCHER/FONDO.png (the user's
 # picture of the plaza at sunset): the accent (selection, buttons) is the orange of the sunset and its
 # embers, the glass tint a dark steel slate. Gears of War's are crimson on a warm charcoal.
