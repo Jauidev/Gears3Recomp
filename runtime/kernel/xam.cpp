@@ -1,3 +1,21 @@
+#ifdef __ANDROID__
+#include <jni.h>
+static JavaVM* g_rumbleVm = nullptr;
+static jclass g_mainActivityCls = nullptr;
+static jmethodID g_rumbleMid = nullptr;
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_xport_MainActivity_nativeInitRumble(JNIEnv* env, jclass clazz)
+{
+    if (env != nullptr && g_rumbleVm == nullptr) {
+        env->GetJavaVM(&g_rumbleVm);
+    }
+    if (g_mainActivityCls == nullptr && clazz != nullptr) {
+        g_mainActivityCls = (jclass)env->NewGlobalRef(clazz);
+        g_rumbleMid = env->GetStaticMethodID(g_mainActivityCls, "setGamepadRumble", "(II)V");
+    }
+}
+#endif
 #include <stdafx.h>
 #include "xam.h"
 #include "xdm.h"
@@ -585,6 +603,8 @@ uint32_t XamInputGetCapabilities(uint32_t userIndex, uint32_t flags, XAMINPUT_CA
     memset(caps, 0, sizeof(*caps));
     caps->Type = XAMINPUT_DEVTYPE_GAMEPAD;
     caps->SubType = XAMINPUT_DEVSUBTYPE_GAMEPAD;
+    caps->Vibration.wLeftMotorSpeed = 0xFFFF;
+    caps->Vibration.wRightMotorSpeed = 0xFFFF;
     return ERROR_SUCCESS;
 }
 
@@ -652,7 +672,35 @@ uint32_t XamInputGetState(uint32_t userIndex, uint32_t flags, XAMINPUT_STATE* st
 
 uint32_t XamInputSetState(uint32_t userIndex, uint32_t flags, XAMINPUT_VIBRATION* vibration)
 {
-    return userIndex == 0 ? ERROR_SUCCESS : ERROR_DEVICE_NOT_CONNECTED;
+    if (userIndex != 0)
+        return ERROR_DEVICE_NOT_CONNECTED;
+
+#ifdef __ANDROID__
+    if (vibration != nullptr && g_rumbleVm != nullptr && g_mainActivityCls != nullptr && g_rumbleMid != nullptr) {
+        static uint16_t s_lastLeft = 0;
+        static uint16_t s_lastRight = 0;
+        uint16_t left = ByteSwap(vibration->wLeftMotorSpeed);
+        uint16_t right = ByteSwap(vibration->wRightMotorSpeed);
+        if (left != s_lastLeft || right != s_lastRight) {
+            s_lastLeft = left;
+            s_lastRight = right;
+            JNIEnv* env = nullptr;
+            bool attached = false;
+            if (g_rumbleVm->GetEnv((void**)&env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+                if (g_rumbleVm->AttachCurrentThread(&env, nullptr) == JNI_OK) {
+                    attached = true;
+                }
+            }
+            if (env != nullptr) {
+                env->CallStaticVoidMethod(g_mainActivityCls, g_rumbleMid, (jint)left, (jint)right);
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                if (attached) g_rumbleVm->DetachCurrentThread();
+            }
+        }
+    }
+#endif
+
+    return ERROR_SUCCESS;
 }
 
 // Menus read the pad as keystrokes (XINPUT_KEYSTROKE). They are generated from the pad state
